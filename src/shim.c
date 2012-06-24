@@ -160,12 +160,12 @@ int open(__const char* pathname, int flags, ...) {
 
   /* Simple pass-through if disabled */
   if (!shim_enabled)
-    return open(pathname, flags, mode);
+    return (*copen)(pathname, flags, mode);
 
   /* If enabled but not initialised, call post_init now */
   if (!lps_daemon)
     post_init();
 
   /* TODO: Something other than pass-through */
-  return open(pathname, flags, mode);
+  return (*copen)(pathname, flags, mode);
 }
