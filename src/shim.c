@@ -126,7 +126,7 @@ static void post_init(void) {
     close(pipefd[0]);
 
     /* Switch to daemon process */
-    execlp("prereadshim-daemon", "prereadshim-daemon", NULL);
+    execlp("prereadshimdaemon", "prereadshimdaemon", NULL);
 
     /* If we get here, execlp() failed. */
     message = "preread daemon: could not start\n";
