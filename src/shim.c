@@ -48,6 +48,9 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <errno.h>
+#include <fnmatch.h>
+
+#include "hashset.h"
 
 #ifndef RTLD_NEXT
 #error RTLD_NEXT undefined; please provide a definition of the constant if your\
@@ -71,6 +74,16 @@ static int shim_enabled;
 
 /* The open() function from the next library in the chain (usually libc). */
 static int (*copen)(const char*, int, ...);
+
+/* Set of files exempted from the DENY option. */
+static hashset deny_exempt;
+
+/* Returns whether the given file's existence should be denied. */
+static int should_deny(char* name);
+
+#ifndef __const
+#define __const
+#endif
 
 void __attribute__((constructor)) libprereadshim_init(void) {
   char* message;
@@ -151,6 +164,9 @@ static void post_init(void) {
    * of the host process.
    */
   unsetenv("PREREADSHIM_DISABLE");
+
+  /* Allocate structures */
+  deny_exempt = hs_create();
 }
 
 int open(__const char* pathname, int flags, ...) {
@@ -169,6 +185,52 @@ int open(__const char* pathname, int flags, ...) {
   if (!lps_daemon)
     post_init();
 
-  /* TODO: Something other than pass-through */
+  /* Should we deny it? */
+  if (should_deny((char*)pathname)) {
+    /* If writing or creating, whitelist it now.
+     * Specifically allow creation on read-only. While it doesn't make much
+     * sense, it doesn't make any more sense to fail due to the file not
+     * existing in that case.
+     */
+    if (((flags & (O_RDONLY|O_WRONLY|O_RDWR)) != O_RDONLY) ||
+        (flags & O_CREAT)) {
+      hs_put(deny_exempt, (char*)pathname);
+    } else {
+      /* This is not the file you are looking for... */
+      errno = ENOENT;
+      return -1;
+    }
+  }
+
+  /* No other instruction, return normally */
   return (*copen)(pathname, flags, mode);
+}
+
+static int should_deny(char* name) {
+  char* denylist, * starg, * pattern;
+
+  if (hs_test(deny_exempt, name)) return 0;
+
+  /* Does it match any glob pattern? */
+  denylist = getenv("PREREADSHIM_DENY");
+  if (!denylist) return 0; /* No deny list configured */
+  /* Make copy since strtok modifies it. */
+  denylist = strdup(denylist);
+  if (!denylist) return 0; /* Out of memory to test with */
+
+  /* Examine each element and see if it matches */
+  starg = denylist;
+  while (pattern = strtok(starg, ":")) {
+    starg = NULL;
+
+    if (!fnmatch(pattern, name, 0)) {
+      /* Matches, this file should be denied. */
+      free(denylist);
+      return 1;
+    }
+  }
+
+  /* Nothing matches, allow. */
+  free(denylist);
+  return 0;
 }

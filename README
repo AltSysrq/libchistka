@@ -53,3 +53,14 @@ Uninstalling:
   make uninstall
 or
   sudo make uninstall
+
+
+CONFIGURATION
+
+The environment variable PREREADSHIM_DENY may be set to a colon-separated list
+of glob patterns. If any file to be opened for reading matches any of the
+patterns (see fnmatch(3)), libprereadshim will deny the file's existence. Files
+which are opened for writing at any time are whitelisted and thereafter not
+affected by this option. For example, specifying
+  */Cache/?/*:*/OfflineCache/?/*
+would prevent Firefox from reading old cache files.
