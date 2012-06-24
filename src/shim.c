@@ -94,6 +94,9 @@ void __attribute__((constructor)) libprereadshim_init(void) {
     shim_enabled = 0;
     return;
   }
+
+  /* OK, Enabled */
+  shim_enabled = 1;
 }
 
 /* Additional startup logic that must run after everything else is
@@ -117,7 +120,7 @@ static void post_init(void) {
   if (!lps_daemon) {
     /* Child. */
     close(pipefd[1]); /* Close write end */
-    if (!dup2(pipefd[0], STDIN_FILENO)) {
+    if (dup2(pipefd[0], STDIN_FILENO)) {
       close(pipefd[0]);
       message = "preread daemon: Could not set input pipe up\n";
       write(STDERR_FILENO, message, strlen(message));
