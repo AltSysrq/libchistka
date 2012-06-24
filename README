@@ -1,0 +1,50 @@
+libprereadshim
+
+libprereadshim is a layer that can be inserted between the OS's system calls
+and another program. It essentially attempts to solve the opposite problem as
+libeatmydata: programs which make isolated, small reads.
+
+An example of this problem is Firefox. Whenever a website is accessed, it will
+check for a cookie or other such data, often spinning the HDD back up just for
+a miniscule data access. (The other problem of Firefox fsync()ing A LOT should
+be handled by libeatmydata.)
+
+libprereadshim uses four methods to mitigate the read problem:
+
+1. Programs usually use mostly the same files on each run. The first 8 MB (by
+default) of files read by the program more than 15 (by default) seconds after
+the program started are automatically read in when it starts.
+
+2. Traversing one part of a directory usually results in traversing more of
+it. Whenever a file is opened, its containing directory is iterated if it is
+the first time that a file in that directory was opened.
+
+3. Reading one file in a directory is usually followed by reading others (eg,
+cookies in Firefox). When a file is openned for reading whose name matches a
+configured pattern(s), other files in that directory will be read in the
+background.
+
+4. libprereadshim may be configured to deny the existence of files matching
+certain patterns.
+
+Dependencies:
+  Just make and a C compiler. GNU Autotools as well if working directly from
+  the git distribution.
+
+Building:
+  If configure does not exist in the project directory, first run
+    autoreconf
+
+  In either case, then run
+    ./configure
+    make
+
+Installing:
+  As root, run
+    make install
+  (on Ubuntu and such just run "sudo make install" as yourself)
+
+Uninstalling:
+  make uninstall
+or
+  sudo make uninstall
