@@ -13,14 +13,19 @@ AC_CONFIG_FILES([Makefile src/Makefile])
 
 # Checks for programs.
 AC_PROG_CC
+AC_PROG_RANLIB
 
 # Checks for libraries.
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdlib.h string.h unistd.h dlfcn.h])
+AC_CHECK_HEADERS([stdlib.h string.h unistd.h dlfcn.h fcntl.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 
 # Checks for library functions.
+AC_CHECK_FUNCS([dup2 putenv])
+AC_FUNC_FORK
+AC_TYPE_MODE_T
+AC_TYPE_PID_T
 
 AC_OUTPUT

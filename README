@@ -9,7 +9,7 @@ check for a cookie or other such data, often spinning the HDD back up just for
 a miniscule data access. (The other problem of Firefox fsync()ing A LOT should
 be handled by libeatmydata.)
 
-libprereadshim uses four methods to mitigate the read problem:
+libprereadshim uses five methods to mitigate the read problem:
 
 1. Programs usually use mostly the same files on each run. The first 8 MB (by
 default) of files read by the program more than 15 (by default) seconds after
@@ -19,12 +19,17 @@ the program started are automatically read in when it starts.
 it. Whenever a file is opened, its containing directory is iterated if it is
 the first time that a file in that directory was opened.
 
-3. Reading one file in a directory is usually followed by reading others (eg,
+3. Opening a file for reading usually indicates that the whole file will be
+read at some point. When a file is opened for reading, data from the file (up
+to 64 MB by default) is read before returning the file handle, the first time a
+given file is opened.
+
+4. Reading one file in a directory is usually followed by reading others (eg,
 cookies in Firefox). When a file is openned for reading whose name matches a
 configured pattern(s), other files in that directory will be read in the
 background.
 
-4. libprereadshim may be configured to deny the existence of files matching
+5. libprereadshim may be configured to deny the existence of files matching
 certain patterns.
 
 Dependencies:
