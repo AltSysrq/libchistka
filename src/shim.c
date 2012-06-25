@@ -49,7 +49,9 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <fnmatch.h>
+#include <stdio.h>
 
+#include "common.h"
 #include "hashset.h"
 
 #ifndef RTLD_NEXT
@@ -187,7 +189,7 @@ int open(__const char* pathname, int flags, ...) {
   va_list args;
   mode_t mode;
   int fd;
-  char discard[4096];
+  char discard[4096], daemon_input[PREREAD_MAX_FILENAME_LEN+2];
   unsigned buffers_read, readahead_amt;
   off_t old_pos;
 
@@ -243,6 +245,27 @@ int open(__const char* pathname, int flags, ...) {
         break;
     /* Restore old position. */
     lseek(fd, old_pos, SEEK_SET);
+  }
+
+  /* If reading, send the filename to the daemon if safe. */
+  if (((flags & O_RDONLY) == O_RDONLY ||
+       (flags & O_RDWR  ) == O_RDWR) &&
+      !strchr(pathname, '\n') &&
+      strlen(pathname) <= PREREAD_MAX_FILENAME_LEN &&
+      command_output) {
+    /* Add a \n to the end of the pathname, then send it to the daemon */
+    sprintf(daemon_input, "%s\n", pathname);
+    if (strlen(daemon_input) !=
+        write(command_output, daemon_input, strlen(daemon_input))) {
+      /* Something went wrong, close the stream and send no more commands.
+       *
+       * Printing a diagnostic is inappropriate at this point since we're in
+       * the middle of the host's execution and it may be using stderr for
+       * something.
+       */
+      close(command_output);
+      command_output = 0;
+    }
   }
 
   after_readahead:
