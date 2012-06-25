@@ -59,7 +59,7 @@ static void input_available(int parm) {
   char filename[PREREAD_MAX_FILENAME_LEN+2]; /* +2 for LF and NUL */
   while (fgets(filename, sizeof(filename), stdin)) {
     /* filename already has \n at end */
-    printf("daemon: %s", filename);
+    fprintf(stderr, "daemon: %s", filename);
   }
 
   /* Any error terminates reading, except for indications that there is
