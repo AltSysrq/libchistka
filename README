@@ -35,6 +35,8 @@ certain patterns.
 Dependencies:
   Just make and a C compiler. GNU Autotools as well if working directly from
   the git distribution.
+  Your kernel must support using O_ASYNC on pipes. Linux 2.6 (and later) is an
+  example of such a kernel.
 
 Building:
   If configure does not exist in the project directory, first run
@@ -68,3 +70,13 @@ would prevent Firefox from reading old cache files.
 The environment variable PREREADSHIM_READAHEAD indicates how many megabytes
 should be read from each file opened for reading. If unset, it defaults to
 64. Setting it to zero effectively disables readahead.
+
+The amount of time, in seconds, between the signaling of an event and its
+processing can be altered with the environment variable PREREADSHIM_DELAY. The
+default value is 5 seconds.
+
+If the environment variable PREREADSHIM_PROFILE exists, a list of filenames is
+read from the file specified in that variable, one file per line.
+PREREADSHIM_DELAY seconds after the program starts, the contents of these files
+are read in, up to PREREADSHIM_PREREAD megabytes. PREREADSHIM_PREREAD defaults
+to 16 megabytes.
