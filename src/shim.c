@@ -192,6 +192,7 @@ int open(__const char* pathname, int flags, ...) {
   char discard[4096], daemon_input[PREREAD_MAX_FILENAME_LEN+2];
   unsigned buffers_read, readahead_amt;
   struct stat stat;
+  off_t old_pos;
 
   /* It is possible the constructor function won't be called.
    * Detect this and call it now.
@@ -240,6 +241,14 @@ int open(__const char* pathname, int flags, ...) {
     /* Make sure it's a normal file */
     if (!fstat(fd, &stat) && S_ISREG(stat.st_mode)) {
       readahead_amt = config_readahead()*(1024*1024/sizeof(discard));
+      old_pos = lseek(fd, 0, SEEK_CUR);
+      if (old_pos == -1) {
+        /* We couldn't get the current position. Ignore the error and just
+         * proceed to the next step.
+         */
+        errno = 0;
+        goto after_readahead;
+      }
       if (-1 == lseek(fd, 0, SEEK_SET)) {
         /* We couldn't seek for some reason.
          * Ignore the error and just proceed to any next step.
@@ -252,11 +261,8 @@ int open(__const char* pathname, int flags, ...) {
         if (sizeof(discard) != read(fd, discard, sizeof(discard)))
           break;
 
-      after_readahead:
-      /* Reopen the file to reset everything to the way it used to be. */
-      close(fd);
-      fd = (*copen)(pathname, flags, mode);
-      if (fd == -1) return -1;
+      /* Seek back to where we started */
+      lseek(fd, old_pos, SEEK_SET);
     } else {
       /* Not a regular file or fstat() failed.
        * In case of the latter, reset errno.
@@ -264,6 +270,7 @@ int open(__const char* pathname, int flags, ...) {
       errno = 0;
     }
   }
+  after_readahead:
 
   /* If reading, send the filename to the daemon if safe. */
   if (((flags & O_RDONLY) == O_RDONLY ||
