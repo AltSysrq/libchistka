@@ -164,6 +164,12 @@ void hs_put(hashset hs, char* data) {
 
   if (!hs || !hs->entries) return;
 
+  /* Make defunct if will exceed limit */
+  if (hs->num_entries+1 >= hs->defunct_thresh) {
+    hs_free_entries(hs);
+    return;
+  }
+
   /* If this would bring the load average above 50%, double size. */
   if (hs->num_entries*2 >= hs->table_size) {
     /* Move hashset data to temporary */
