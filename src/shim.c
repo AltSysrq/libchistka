@@ -81,6 +81,20 @@ static hashset deny_exempt;
 /* Returns whether the given file's existence should be denied. */
 static int should_deny(char* name);
 
+/* Returns the readahead amount (overridable in PREREADSHIM_READAHEAD) in
+ * megabytes.
+ */
+static unsigned config_readahead() {
+  static int has_extracted = 0;
+  static unsigned value = 64;
+
+  if (!has_extracted && getenv("PREREADSHIM_READAHEAD"))
+    value = atoi(getenv("PREREADSHIM_READAHEAD"));
+
+  has_extracted = 1;
+  return value;
+}
+
 #ifndef __const
 #define __const
 #endif
@@ -172,6 +186,10 @@ static void post_init(void) {
 int open(__const char* pathname, int flags, ...) {
   va_list args;
   mode_t mode;
+  int fd;
+  char discard[4096];
+  unsigned buffers_read, readahead_amt;
+  off_t old_pos;
 
   va_start(args, flags);
   mode = va_arg(args, mode_t);
@@ -203,7 +221,32 @@ int open(__const char* pathname, int flags, ...) {
   }
 
   /* No other instruction, return normally */
-  return (*copen)(pathname, flags, mode);
+  fd = (*copen)(pathname, flags, mode);
+
+  if (fd == -1) return -1;
+
+  /* If reading (O_RDONLY or O_RDWR), perform readahead */
+  if ((flags & O_RDONLY) == O_RDONLY ||
+      (flags & O_RDWR  ) == O_RDWR) {
+    readahead_amt = config_readahead()*(1024*1024/sizeof(discard));
+    old_pos = lseek(fd, 0, SEEK_CUR);
+    if (-1 == lseek(fd, 0, SEEK_SET)) {
+      /* We couldn't seek for some reason.
+       * Ignore the error and just proceed to any next step.
+       */
+      errno = 0;
+      goto after_readahead;
+    }
+    /* Read to EOF or the readahead limit */
+    for (buffers_read = 0; buffers_read < readahead_amt; ++buffers_read)
+      if (sizeof(discard) != read(fd, discard, sizeof(discard)))
+        break;
+    /* Restore old position. */
+    lseek(fd, old_pos, SEEK_SET);
+  }
+
+  after_readahead:
+  return fd;
 }
 
 static int should_deny(char* name) {

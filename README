@@ -64,3 +64,7 @@ which are opened for writing at any time are whitelisted and thereafter not
 affected by this option. For example, specifying
   */Cache/?/*:*/OfflineCache/?/*
 would prevent Firefox from reading old cache files.
+
+The environment variable PREREADSHIM_READAHEAD indicates how many megabytes
+should be read from each file opened for reading. If unset, it defaults to
+64. Setting it to zero effectively disables readahead.
