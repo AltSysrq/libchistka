@@ -75,7 +75,7 @@ static pid_t lps_daemon;
 static int shim_enabled;
 
 /* The open() function from the next library in the chain (usually libc). */
-static int (*copen)(const char*, int, ...);
+static int (*copen)(const char*, int, ...) = NULL;
 
 /* Set of files exempted from the DENY option. */
 static hashset deny_exempt;
@@ -191,7 +191,11 @@ int open(__const char* pathname, int flags, ...) {
   int fd;
   char discard[4096], daemon_input[PREREAD_MAX_FILENAME_LEN+2];
   unsigned buffers_read, readahead_amt;
-  off_t old_pos;
+
+  /* It is possible the constructor function won't be called.
+   * Detect this and call it now.
+   */
+  if (!copen) libprereadshim_init();
 
   va_start(args, flags);
   mode = va_arg(args, mode_t);
@@ -231,7 +235,6 @@ int open(__const char* pathname, int flags, ...) {
   if ((flags & O_RDONLY) == O_RDONLY ||
       (flags & O_RDWR  ) == O_RDWR) {
     readahead_amt = config_readahead()*(1024*1024/sizeof(discard));
-    old_pos = lseek(fd, 0, SEEK_CUR);
     if (-1 == lseek(fd, 0, SEEK_SET)) {
       /* We couldn't seek for some reason.
        * Ignore the error and just proceed to any next step.
@@ -243,8 +246,12 @@ int open(__const char* pathname, int flags, ...) {
     for (buffers_read = 0; buffers_read < readahead_amt; ++buffers_read)
       if (sizeof(discard) != read(fd, discard, sizeof(discard)))
         break;
-    /* Restore old position. */
-    lseek(fd, old_pos, SEEK_SET);
+
+    after_readahead:
+    /* Reopen the file to reset everything to the way it used to be. */
+    close(fd);
+    fd = (*copen)(pathname, flags, mode);
+    if (fd == -1) return -1;
   }
 
   /* If reading, send the filename to the daemon if safe. */
@@ -268,7 +275,6 @@ int open(__const char* pathname, int flags, ...) {
     }
   }
 
-  after_readahead:
   return fd;
 }
 
