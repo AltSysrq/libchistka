@@ -40,6 +40,7 @@ SUCH DAMAGE.
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <time.h>
 
 /* The daemon reads filenames from stdin, one filename per line. Each filename
  * will schedule any necessary events associated with that file.
@@ -52,48 +53,157 @@ SUCH DAMAGE.
 #include "hashset.h"
 #include "common.h"
 
-/* True if the input stream is still open. */
-static int reading_input;
+static void add_events(char*);
+static void add_one_event(void (*)(char*), char*);
+static void run_events(void);
+static void read_input(void);
+static void profile_open(void);
+static void profile_log(char*);
 
-static void input_available(int parm) {
-  char filename[PREREAD_MAX_FILENAME_LEN+2]; /* +2 for LF and NUL */
-  while (fgets(filename, sizeof(filename), stdin)) {
-    /* filename already has \n at end */
-    fprintf(stderr, "daemon: %s", filename);
-  }
+/* The event queue.
+ * Each event stores when it shoud run, as well as the function to call and the
+ * filename to pass to it. The events are stored in a singly-linked list.
+ */
+typedef struct event {
+  time_t when;
+  void (*run)(char*);
+  char* datum;
+  struct event* next;
+} event;
+static event* event_queue;
 
-  /* Any error terminates reading, except for indications that there is
-   * /currently/ no input, which we simply ignore.
-   */
-  if (errno != EAGAIN && errno != EWOULDBLOCK)
-    reading_input = 0;
-  else
-    clearerr(stdin);
-}
+/* If non-NULL, incomming filenames are written to this file. It is closed if
+ * it exceeds 1 MB in size.
+ */
+static FILE* profile_output;
 
 int main(void) {
-  struct sigaction sigio = {};
+  /* If a profile is set, read it if possible, then open for writing. */
+  profile_open();
+
   /* Reconfigure stdin to be ASYNC and NONBLOCK */
   if (-1 == fcntl(STDIN_FILENO, F_SETFL, O_ASYNC|O_NONBLOCK))
     perror("fcntl(F_SETFL,O_ASYNC|O_NONBLOCK)");
   if (-1 == fcntl(STDIN_FILENO, F_SETOWN, getpid()))
     perror("fcntl(F_SETOWN)");
 
-  /* Set signal handlers */
-  sigio.sa_handler = input_available;
-  sigaction(SIGIO, &sigio, NULL);
-
-  /* Process signals until input is closed.
-   * Once input is closed, the parent process has exited, so continuing with
-   * events would have no benefit.
-   */
-  reading_input = 1;
-  do {
-    /* Read any input that may have occurred when there was no signal handler */
-    input_available(0);
-    if (feof(stdin) || !reading_input) break;
+  /* Run until we exit due to an unexpected error or the input stream closes. */
+  event_queue = NULL;
+  while (1) {
+    read_input();
+    run_events();
     pause();
-  } while (!feof(stdin) && reading_input);
+  }
 
   return 0;
+}
+
+/* Reads any pending input and adds events to the event queue.
+ *
+ * This should be called frequently during event processing so that the host
+ * process does not block.
+ */
+static void read_input(void) {
+  char filename[PREREAD_MAX_FILENAME_LEN+2]; /* +2 for LF and NUL */
+  while (fgets(filename, sizeof(filename), stdin)) {
+    if (!filename[0]) continue;
+    /* Remove the trailing newline */
+    filename[strlen(filename)-1] = 0;
+    /* Schedule any events applying to this file. */
+    add_events(filename);
+    /* Log if appropriate */
+    profile_log(filename);
+  }
+
+  /* Any error terminates reading, except for indications that there is
+   * /currently/ no input, which we simply ignore.
+   *
+   * If nothing remains to read, just terminate the program because its
+   * usefullness has ceased.
+   */
+  if (errno != EAGAIN && errno != EWOULDBLOCK)
+    exit(0);
+  else
+    clearerr(stdin);
+}
+
+/* Adds any events that should occur given a read from the specified
+ * filename.
+ */
+static void add_events(char* filename) {
+  /* TODO */
+}
+
+/* Adds the given event to the event queue, scheduling it for
+ * $PREREAD_DELAY seconds in the future.
+ */
+static void add_one_event(void (*f)(char*), char* datum) {
+  time_t when;
+  event** link, * it;
+
+  static unsigned offset;
+  static int has_offset = 0;
+  if (!has_offset) {
+    has_offset = 1;
+    offset = 5;
+    if (getenv("PREREAD_DELAY"))
+      offset = atoi(getenv("PREREAD_DELAY"));
+  }
+  when = time(NULL) + offset;
+
+  /* Create event */
+  it = malloc(sizeof(event));
+  if (!it) return; /* oh well... */
+  it->when = when;
+  it->run = f;
+  it->datum = strdup(datum);
+  it->next = NULL;
+
+  /* Add to queue */
+  for (link = &event_queue; *link; link = &(**link).next);
+  *link = it;
+}
+
+/* Executes any pending events scheduled for now and earlier. If any events
+ * remain which are scheduled for the future, an alarm is set to occur when the
+ * next event is ready to be processed.
+ */
+static void run_events(void) {
+  time_t now;
+  event* evt, * nxt;
+
+  evt = event_queue;
+  now = time(NULL);
+  while (evt && evt->when <= now) {
+    /* Run the event */
+    (*evt->run)(evt->datum);
+    /* Free it and move on to the next */
+    nxt = evt->next;
+    free(evt->datum);
+    free(evt);
+    evt = nxt;
+    /* Read any new input that may be available */
+    read_input();
+    /* The time may have changed while executing */
+    now = time(NULL);
+  }
+
+  /* If there is an event in the future, schedule an alarm */
+  if (evt)
+    alarm(now - evt->when);
+}
+
+static void profile_open(void) {
+  /* TODO */
+}
+
+static void profile_log(char* filename) {
+  if (profile_output) {
+    fprintf(profile_output, "%s\n", filename);
+    /* Close on error or if it exceeds 1 MB */
+    if (ftell(profile_output) < 0 || ftell(profile_output) > 1024*1024) {
+      fclose(profile_output);
+      profile_output = NULL;
+    }
+  }
 }
