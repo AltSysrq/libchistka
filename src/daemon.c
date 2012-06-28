@@ -72,7 +72,9 @@ static void run_events(void);
 static void read_input(void);
 static void profile_open(void);
 static void profile_log(char*);
+#ifdef DEBUG
 static void event_print(char*);
+#endif
 static void event_read_siblings(char*);
 static void event_iterate_directory(char*);
 static void event_play_profile(char*);
@@ -170,7 +172,9 @@ static void read_input(void) {
  * This destroys the contents of filename.
  */
 static void add_events(char* filename) {
+#ifdef DEBUG
   add_one_event(event_print, filename);
+#endif
   if (parent_dir(filename)) {
     if (!hs_test(directories_read, filename)) {
       add_one_event(event_read_siblings, filename);
@@ -283,10 +287,12 @@ static void profile_log(char* filename) {
   }
 }
 
+#ifdef DEBUG
 /* Dummy event for testing */
 static void event_print(char* filename) {
   dbgprintf(stderr, "daemon: %s\n", filename);
 }
+#endif
 
 static void event_iterate_directory(char* directory) {
   DIR* dir = opendir(directory);
