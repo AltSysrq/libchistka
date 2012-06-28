@@ -135,6 +135,11 @@ static void read_input(void) {
     if (!filename[0]) continue;
     /* Remove the trailing newline */
     filename[strlen(filename)-1] = 0;
+    /* Don't even bother with /proc/, /sys/, or /dev/ ! */
+    if (filename == strstr(filename, "/proc/") ||
+        filename == strstr(filename, "/sys/") ||
+        filename == strstr(filename, "/dev/"))
+      continue;
     /* Schedule any events applying to this file. */
     add_events(filename);
     /* Log if appropriate */
