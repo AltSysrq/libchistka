@@ -100,6 +100,7 @@ static void signal_ignore(int parm) {}
 int main(void) {
   struct sigaction sig = {};
 
+  event_queue = NULL;
   directories_traversed = hs_create();
   hs_defunct_at(directories_traversed, 4096);
   directories_read = hs_create();
@@ -120,7 +121,6 @@ int main(void) {
     perror("fcntl(F_SETOWN)");
 
   /* Run until we exit due to an unexpected error or the input stream closes. */
-  event_queue = NULL;
   while (1) {
     read_input();
     run_events();
@@ -146,10 +146,10 @@ static void read_input(void) {
         filename == strstr(filename, "/sys/") ||
         filename == strstr(filename, "/dev/"))
       continue;
-    /* Schedule any events applying to this file. */
-    add_events(filename);
     /* Log if appropriate */
     profile_log(filename);
+    /* Schedule any events applying to this file. */
+    add_events(filename);
   }
 
   /* Any error terminates reading, except for indications that there is
@@ -166,6 +166,8 @@ static void read_input(void) {
 
 /* Adds any events that should occur given a read from the specified
  * filename.
+ *
+ * This destroys the contents of filename.
  */
 static void add_events(char* filename) {
   add_one_event(event_print, filename);
@@ -266,7 +268,8 @@ static void run_events(void) {
 }
 
 static void profile_open(void) {
-  /* TODO */
+  if (getenv("PREREADSHIM_PROFILE"))
+    add_one_event(event_play_profile, getenv("PREREADSHIM_PROFILE"));
 }
 
 static void profile_log(char* filename) {
@@ -366,4 +369,37 @@ static void event_read_siblings(char* directory) {
   }
 
   closedir(dir);
+}
+
+static void event_play_profile(char* infile) {
+  FILE* in, * datain;
+  char filename[4096], buffer[4096];
+  unsigned limit, data_read, amt;
+
+  limit = 16*1024*1024;
+  if (getenv("PREREADSHIM_PREREAD"))
+    limit = atoi(getenv("PREREADSHIM_PREREAD"))*1024*1024;
+
+  data_read = 0;
+
+  if (in = fopen(infile, "r")) {
+    while (data_read < limit && fgets(filename, sizeof(filename), in)) {
+      if (!filename[0]) continue;
+      /* Remove trailing newline */
+      filename[strlen(filename)-1] = 0;
+      dbgprintf(stderr, "daemon: replaying profile event: %s\n", filename);
+
+      if (datain = fopen(filename, "r")) {
+        do {
+          amt = fread(buffer, 1, sizeof(buffer), datain);
+          data_read += amt;
+        } while (amt == sizeof(buffer) && data_read < limit);
+        fclose(datain);
+      }
+    }
+    fclose(in);
+  }
+
+  /* Done reading those files, now open the profile output. */
+  profile_output = fopen(infile, "w");
 }
