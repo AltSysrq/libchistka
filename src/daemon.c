@@ -285,5 +285,74 @@ static void event_iterate_directory(char* directory) {
 }
 
 static void event_read_siblings(char* directory) {
-  fprintf(stderr, "daemon: siblings (TODO) %s\n", directory);
+  static unsigned read_limit;
+  static int has_read_limit = 0;
+  char discard[4096], subfile[4096];
+  unsigned data_read, amt;
+  DIR* dir;
+  FILE* file;
+  struct dirent* ent;
+  struct stat st;
+  int is_regular;
+  fprintf(stderr, "daemon: siblings %s\n", directory);
+
+  if (!has_read_limit) {
+    has_read_limit = 1;
+    read_limit = 16;
+    if (getenv("PREREADSHIM_SIBLINGS"))
+      read_limit = atoi(getenv("PREREADSHIM_SIBLINGS"));
+
+    read_limit *= 1024*1024;
+  }
+
+  dir = opendir(directory);
+  if (!dir) return;
+
+  data_read = 0;
+  /* Iterate through the directory and read any regular file encountered */
+  while (data_read < read_limit && (ent = readdir(dir))) {
+    if (sizeof(subfile) > strlen(directory) + 1 /* slash */ +
+        strlen(ent->d_name)) {
+      strcpy(subfile, directory);
+      strcat(subfile, "/");
+      strcat(subfile, ent->d_name);
+    } else {
+      /* Path name too long */
+      continue;
+    }
+
+    /* If possible, get the type of the file from the dirent. If we get
+     * unknown, or the system does not have DT_REG and DT_UNKNOWN, resort to
+     * stat()ing the file to find out what it is.
+     */
+#if defined(DT_REG) && defined(DT_UNKNOWN)
+    if (ent->d_type == DT_REG) {
+      is_regular = 1;
+    } else if (ent->d_type == DT_UNKNOWN) {
+#endif
+      /* Either the filesystem can't tell us what the file is, or the system
+       * doesn't support returning file types within the dirent.
+       *
+       * Stat the file to find out what it is.
+       */
+      is_regular = !stat(subfile, &st) && S_ISREG(st.st_mode);
+#if defined(DT_REG) && defined(DT_UNKNOWN)
+    } else {
+      /* Known and not REG */
+      is_regular = 0;
+    }
+#endif
+
+    if (is_regular && (file = fopen(subfile, "r"))) {
+      fprintf(stderr, "daemon: sibling read: %s\n", subfile);
+      do {
+        amt = fread(discard, 1, sizeof(discard), file);
+        data_read += amt;
+      } while (amt == sizeof(discard));
+
+      fclose(file);
+    }
+  }
+
+  closedir(dir);
 }

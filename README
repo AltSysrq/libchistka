@@ -80,3 +80,6 @@ read from the file specified in that variable, one file per line.
 PREREADSHIM_DELAY seconds after the program starts, the contents of these files
 are read in, up to PREREADSHIM_PREREAD megabytes. PREREADSHIM_PREREAD defaults
 to 16 megabytes.
+
+The environment variable PREREADSHIM_SIBLINGS can be set to indicate the number
+of megabytes to read from sibling files an a directory. By default it is 16.
