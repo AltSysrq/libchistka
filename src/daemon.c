@@ -371,7 +371,7 @@ static void event_read_siblings(char* directory) {
         read_input();
         amt = fread(discard, 1, sizeof(discard), file);
         data_read += amt;
-      } while (amt == sizeof(discard));
+      } while (amt == sizeof(discard) && data_read < read_limit);
 
       fclose(file);
     }
