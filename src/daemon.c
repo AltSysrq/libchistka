@@ -59,6 +59,7 @@ static void run_events(void);
 static void read_input(void);
 static void profile_open(void);
 static void profile_log(char*);
+static void event_print(char*);
 
 /* The event queue.
  * Each event stores when it shoud run, as well as the function to call and the
@@ -77,9 +78,18 @@ static event* event_queue;
  */
 static FILE* profile_output;
 
+static void signal_ignore(int parm) {}
+
 int main(void) {
+  struct sigaction sig = {};
+
   /* If a profile is set, read it if possible, then open for writing. */
   profile_open();
+
+  /* Don't die on SIGIO or SIGALRM */
+  sig.sa_handler = signal_ignore;
+  sigaction(SIGIO, &sig, NULL);
+  sigaction(SIGALRM, &sig, NULL);
 
   /* Reconfigure stdin to be ASYNC and NONBLOCK */
   if (-1 == fcntl(STDIN_FILENO, F_SETFL, O_ASYNC|O_NONBLOCK))
@@ -131,7 +141,7 @@ static void read_input(void) {
  * filename.
  */
 static void add_events(char* filename) {
-  /* TODO */
+  add_one_event(event_print, filename);
 }
 
 /* Adds the given event to the event queue, scheduling it for
@@ -170,18 +180,17 @@ static void add_one_event(void (*f)(char*), char* datum) {
  */
 static void run_events(void) {
   time_t now;
-  event* evt, * nxt;
+  event* nxt;
 
-  evt = event_queue;
   now = time(NULL);
-  while (evt && evt->when <= now) {
+  while (event_queue && event_queue->when <= now) {
     /* Run the event */
-    (*evt->run)(evt->datum);
+    (*event_queue->run)(event_queue->datum);
     /* Free it and move on to the next */
-    nxt = evt->next;
-    free(evt->datum);
-    free(evt);
-    evt = nxt;
+    nxt = event_queue->next;
+    free(event_queue->datum);
+    free(event_queue);
+    event_queue = nxt;
     /* Read any new input that may be available */
     read_input();
     /* The time may have changed while executing */
@@ -189,8 +198,8 @@ static void run_events(void) {
   }
 
   /* If there is an event in the future, schedule an alarm */
-  if (evt)
-    alarm(now - evt->when);
+  if (event_queue)
+    alarm(event_queue->when - now > 0? event_queue->when - now : 1);
 }
 
 static void profile_open(void) {
@@ -206,4 +215,9 @@ static void profile_log(char* filename) {
       profile_output = NULL;
     }
   }
+}
+
+/* Dummy event for testing */
+static void event_print(char* filename) {
+  fprintf(stderr, "daemon: %s\n", filename);
 }
