@@ -54,6 +54,12 @@ SUCH DAMAGE.
 #include "hashset.h"
 #include "common.h"
 
+#ifdef DEBUG
+#define dbgprintf fprintf
+#else
+static inline void dbgprintf() {}
+#endif
+
 /* directories_traversed lists directories whose contents have been
  * iterated. directories_read lists directories whose immediate child files
  * have been read.
@@ -276,12 +282,12 @@ static void profile_log(char* filename) {
 
 /* Dummy event for testing */
 static void event_print(char* filename) {
-  fprintf(stderr, "daemon: %s\n", filename);
+  dbgprintf(stderr, "daemon: %s\n", filename);
 }
 
 static void event_iterate_directory(char* directory) {
   DIR* dir = opendir(directory);
-  fprintf(stderr, "daemon: traverse %s: %d\n",
+  dbgprintf(stderr, "daemon: traverse %s: %d\n",
           directory, !!dir);
   if (!dir) return;
 
@@ -299,7 +305,7 @@ static void event_read_siblings(char* directory) {
   struct dirent* ent;
   struct stat st;
   int is_regular;
-  fprintf(stderr, "daemon: siblings %s\n", directory);
+  dbgprintf(stderr, "daemon: siblings %s\n", directory);
 
   if (!has_read_limit) {
     has_read_limit = 1;
@@ -349,7 +355,7 @@ static void event_read_siblings(char* directory) {
 #endif
 
     if (is_regular && (file = fopen(subfile, "r"))) {
-      fprintf(stderr, "daemon: sibling read: %s\n", subfile);
+      dbgprintf(stderr, "daemon: sibling read: %s\n", subfile);
       do {
         amt = fread(discard, 1, sizeof(discard), file);
         data_read += amt;
