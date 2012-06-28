@@ -83,3 +83,29 @@ to 16 megabytes.
 
 The environment variable PREREADSHIM_SIBLINGS can be set to indicate the number
 of megabytes to read from sibling files an a directory. By default it is 16.
+
+ISSUES
+
+The shim layer is not currently thread-safe. Multithreaded programs may cause
+strange problems.
+
+The daemon currently assumes that its CWD always matches that of the host
+process. This will not be the case if the host chdir()s; if this happens, the
+daemon will no longer be able to work with relative paths.
+
+Similar to the above issue, the daemon can be crippled if the host accesses
+/proc or /sys via relative paths.
+
+Since libprereadshim currently uses one daemon per host process, it is not
+really viable to use /etc/ld.conf.preload to globally apply the shim to the
+entire system. Eventually, daemons will be sharable, allowing this to be done.
+
+If a program accesses a file in a directory and seconds later attempts to get
+an exclusive lock in a file within, it may collide with the daemon trying to
+preread that file.
+
+Concurrent modification of files may give unexpected results in corner
+cases. For example, if the host process opens a file in read-append mode,
+libprereadshim will restore the file pointer to its original location after
+prereading, which might no longer be the end of the file (or might not exist
+anymore).
