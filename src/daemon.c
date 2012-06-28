@@ -38,6 +38,7 @@ SUCH DAMAGE.
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <time.h>
@@ -53,6 +54,12 @@ SUCH DAMAGE.
 #include "hashset.h"
 #include "common.h"
 
+/* directories_traversed lists directories whose contents have been
+ * iterated. directories_read lists directories whose immediate child files
+ * have been read.
+ */
+static hashset directories_traversed, directories_read;
+
 static void add_events(char*);
 static void add_one_event(void (*)(char*), char*);
 static void run_events(void);
@@ -60,6 +67,10 @@ static void read_input(void);
 static void profile_open(void);
 static void profile_log(char*);
 static void event_print(char*);
+static void event_read_siblings(char*);
+static void event_iterate_directory(char*);
+static void event_play_profile(char*);
+static int parent_dir(char*);
 
 /* The event queue.
  * Each event stores when it shoud run, as well as the function to call and the
@@ -82,6 +93,11 @@ static void signal_ignore(int parm) {}
 
 int main(void) {
   struct sigaction sig = {};
+
+  directories_traversed = hs_create();
+  hs_defunct_at(directories_traversed, 4096);
+  directories_read = hs_create();
+  hs_defunct_at(directories_read, 4096);
 
   /* If a profile is set, read it if possible, then open for writing. */
   profile_open();
@@ -142,6 +158,19 @@ static void read_input(void) {
  */
 static void add_events(char* filename) {
   add_one_event(event_print, filename);
+  if (parent_dir(filename)) {
+    if (!hs_test(directories_read, filename)) {
+      add_one_event(event_read_siblings, filename);
+      hs_put(directories_read, filename);
+    }
+
+    do {
+      if (!hs_test(directories_traversed, filename)) {
+        add_one_event(event_iterate_directory, filename);
+        hs_put(directories_traversed, filename);
+      }
+    } while (parent_dir(filename));
+  }
 }
 
 /* Adds the given event to the event queue, scheduling it for
@@ -172,6 +201,29 @@ static void add_one_event(void (*f)(char*), char* datum) {
   /* Add to queue */
   for (link = &event_queue; *link; link = &(**link).next);
   *link = it;
+}
+
+/* Destructively modifies the given string to point it to the parent directory
+ * of the input file.
+ *
+ * Returns 1 if the result is meaningful --- that is, it is not the empty
+ * string or the root directory.
+ */
+static int parent_dir(char* file) {
+  char* lastSlash = NULL, * curr;
+  for (curr = file; *curr; ++curr)
+    if (*curr == '/')
+      lastSlash = curr;
+
+  /* If there's no slash, this will result in an empty string. */
+  if (!lastSlash) return 0;
+  /* If the only slash is at position 0 or 1, we have reached the root. */
+  if (lastSlash == file || lastSlash == file+1)
+    return 0;
+
+  /* Kill the slash and return success */
+  *lastSlash = 0;
+  return 1;
 }
 
 /* Executes any pending events scheduled for now and earlier. If any events
@@ -220,4 +272,18 @@ static void profile_log(char* filename) {
 /* Dummy event for testing */
 static void event_print(char* filename) {
   fprintf(stderr, "daemon: %s\n", filename);
+}
+
+static void event_iterate_directory(char* directory) {
+  DIR* dir = opendir(directory);
+  fprintf(stderr, "daemon: traverse %s: %d\n",
+          directory, !!dir);
+  if (!dir) return;
+
+  while (readdir(dir));
+  closedir(dir);
+}
+
+static void event_read_siblings(char* directory) {
+  fprintf(stderr, "daemon: siblings (TODO) %s\n", directory);
 }
