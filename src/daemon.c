@@ -174,7 +174,7 @@ static void add_events(char* filename) {
 }
 
 /* Adds the given event to the event queue, scheduling it for
- * $PREREAD_DELAY seconds in the future.
+ * $PREREADSHIM_DELAY seconds in the future.
  */
 static void add_one_event(void (*f)(char*), char* datum) {
   time_t when;
@@ -185,8 +185,8 @@ static void add_one_event(void (*f)(char*), char* datum) {
   if (!has_offset) {
     has_offset = 1;
     offset = 5;
-    if (getenv("PREREAD_DELAY"))
-      offset = atoi(getenv("PREREAD_DELAY"));
+    if (getenv("PREREADSHIM_DELAY"))
+      offset = atoi(getenv("PREREADSHIM_DELAY"));
   }
   when = time(NULL) + offset;
 
