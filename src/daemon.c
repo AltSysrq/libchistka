@@ -300,7 +300,8 @@ static void event_iterate_directory(char* directory) {
           directory, !!dir);
   if (!dir) return;
 
-  while (readdir(dir));
+  while (readdir(dir))
+    read_input();
   closedir(dir);
 }
 
@@ -331,6 +332,7 @@ static void event_read_siblings(char* directory) {
   data_read = 0;
   /* Iterate through the directory and read any regular file encountered */
   while (data_read < read_limit && (ent = readdir(dir))) {
+    read_input();
     if (sizeof(subfile) > strlen(directory) + 1 /* slash */ +
         strlen(ent->d_name)) {
       strcpy(subfile, directory);
@@ -366,6 +368,7 @@ static void event_read_siblings(char* directory) {
     if (is_regular && (file = fopen(subfile, "r"))) {
       dbgprintf(stderr, "daemon: sibling read: %s\n", subfile);
       do {
+        read_input();
         amt = fread(discard, 1, sizeof(discard), file);
         data_read += amt;
       } while (amt == sizeof(discard));
@@ -390,6 +393,7 @@ static void event_play_profile(char* infile) {
 
   if (in = fopen(infile, "r")) {
     while (data_read < limit && fgets(filename, sizeof(filename), in)) {
+      read_input();
       if (!filename[0]) continue;
       /* Remove trailing newline */
       filename[strlen(filename)-1] = 0;
@@ -397,6 +401,7 @@ static void event_play_profile(char* infile) {
 
       if (datain = fopen(filename, "r")) {
         do {
+          read_input();
           amt = fread(buffer, 1, sizeof(buffer), datain);
           data_read += amt;
         } while (amt == sizeof(buffer) && data_read < limit);
