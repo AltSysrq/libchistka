@@ -50,6 +50,7 @@
 #include <errno.h>
 #include <fnmatch.h>
 #include <stdio.h>
+#include <semaphore.h>
 
 #include "common.h"
 #include "hashset.h"
@@ -58,6 +59,16 @@
 #error RTLD_NEXT undefined; please provide a definition of the constant if your\
  system supports it
 #endif
+
+/* Semaphore to lock state shared in the open() implementation etc.
+ * Only initialised if has_semaphore is true.
+ */
+static sem_t semaphore;
+/* Indicates whether semaphore has been initialised.
+ * This is not used to track whether the semaphore must yet be initialised, but
+ * rather whether it could be opened at all.
+ */
+static int has_semaphore;
 
 /* The time the program began exectution */
 static time_t execution_start_time;
@@ -101,6 +112,12 @@ static unsigned config_readahead() {
 #define __const
 #endif
 
+/* Performs the bare minimum initialisation. This should be called when the
+ * library is loaded. However, it is not necessarily --- using exec() seems to
+ * be able able to bypass it's call.
+ *
+ * Initialises copen, shim_enabled, semaphore
+ */
 void __attribute__((constructor)) libprereadshim_init(void) {
   char* message;
 
@@ -126,6 +143,9 @@ void __attribute__((constructor)) libprereadshim_init(void) {
 
   /* OK, Enabled */
   shim_enabled = 1;
+
+  /* Open a semaphore */
+  has_semaphore = !sem_init(&semaphore, 0, 1);
 }
 
 /* Additional startup logic that must run after everything else is
@@ -193,9 +213,15 @@ int open(__const char* pathname, int flags, ...) {
   unsigned buffers_read, readahead_amt, len;
   struct stat stat;
   off_t old_pos;
+  int status, old_errno;
 
   /* It is possible the constructor function won't be called.
    * Detect this and call it now.
+   *
+   * PROBLEM: A multithreaded program could already have threads by this point!
+   * There is no hope for avoiding the race condition in such a case. However,
+   * most programs implicitly call open() during linking etc, so this will
+   * generally not be a problem.
    */
   if (!copen) libprereadshim_init();
 
@@ -206,6 +232,16 @@ int open(__const char* pathname, int flags, ...) {
   /* Simple pass-through if disabled */
   if (!shim_enabled)
     return (*copen)(pathname, flags, mode);
+
+  /* Entering shared state. If we have a semaphore, lock it now. */
+  if (has_semaphore)
+    /* Wait until success or an error that is not interruption.
+     * If waiting errors for any other reason, continue on and hope for the
+     * best.
+     */
+    while (sem_wait(&semaphore) && errno == EINTR);
+
+#define RETURN(value) do { status = value; goto end; } while(0)
 
   /* If enabled but not initialised, call post_init now */
   if (!lps_daemon)
@@ -224,14 +260,14 @@ int open(__const char* pathname, int flags, ...) {
     } else {
       /* This is not the file you are looking for... */
       errno = ENOENT;
-      return -1;
+      RETURN(-1);
     }
   }
 
   /* No other instruction, return normally */
   fd = (*copen)(pathname, flags, mode);
 
-  if (fd == -1) return -1;
+  if (fd == -1) RETURN(-1);
 
   /* If reading (O_RDONLY or O_RDWR), perform readahead if this is a regular
    * file.
@@ -305,7 +341,17 @@ int open(__const char* pathname, int flags, ...) {
     }
   }
 
-  return fd;
+  RETURN(fd);
+
+  end:
+  /* Leaving use of shared state, release the semaphore if there is one.
+   * First, preserve the old errno in case sem_post somehow fails.
+   */
+  old_errno = errno;
+  if (has_semaphore)
+    sem_post(&semaphore);
+  errno = old_errno;
+  return status;
 }
 
 static int should_deny(char* name) {
