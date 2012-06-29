@@ -89,13 +89,6 @@ ISSUES
 The shim layer is not currently thread-safe. Multithreaded programs may cause
 strange problems.
 
-The daemon currently assumes that its CWD always matches that of the host
-process. This will not be the case if the host chdir()s; if this happens, the
-daemon will no longer be able to work with relative paths.
-
-Similar to the above issue, the daemon can be crippled if the host accesses
-/proc or /sys via relative paths.
-
 Since libprereadshim currently uses one daemon per host process, it is not
 really viable to use /etc/ld.conf.preload to globally apply the shim to the
 entire system. Eventually, daemons will be sharable, allowing this to be done.
