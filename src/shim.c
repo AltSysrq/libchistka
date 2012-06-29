@@ -190,7 +190,7 @@ int open(__const char* pathname, int flags, ...) {
   mode_t mode;
   int fd;
   char discard[4096], daemon_input[PREREAD_MAX_FILENAME_LEN+2];
-  unsigned buffers_read, readahead_amt;
+  unsigned buffers_read, readahead_amt, len;
   struct stat stat;
   off_t old_pos;
 
@@ -278,18 +278,30 @@ int open(__const char* pathname, int flags, ...) {
       !strchr(pathname, '\n') &&
       strlen(pathname) <= PREREAD_MAX_FILENAME_LEN &&
       command_output) {
-    /* Add a \n to the end of the pathname, then send it to the daemon */
-    sprintf(daemon_input, "%s\n", pathname);
-    if (strlen(daemon_input) !=
-        write(command_output, daemon_input, strlen(daemon_input))) {
-      /* Something went wrong, close the stream and send no more commands.
-       *
-       * Printing a diagnostic is inappropriate at this point since we're in
-       * the middle of the host's execution and it may be using stderr for
-       * something.
+    /* If the pathname does not begin with a /, add the current working
+     * directory to the pathname followed by a slash.
+     * Then add a \n to the end of the pathname, then send it to the daemon.
+     */
+    if (getcwd(discard, sizeof(discard))) {
+      snprintf(daemon_input, sizeof(daemon_input), "%s%s%s\n",
+               pathname[0] == '/'? "" : discard,
+               pathname[0] == '/'? "" : "/",
+               pathname);
+      /* If it fit into the buffer (which means that
+       * daemon_input[strlen(daemon_input)+1] == '\n'), send it to the daemon.
        */
-      close(command_output);
-      command_output = 0;
+      len = strlen(daemon_input);
+      if (len > 0 && daemon_input[len-1] == '\n' &&
+          len != write(command_output, daemon_input, len)) {
+        /* Something went wrong, close the stream and send no more commands.
+         *
+         * Printing a diagnostic is inappropriate at this point since we're in
+         * the middle of the host's execution and it may be using stderr for
+         * something.
+         */
+        close(command_output);
+        command_output = 0;
+      }
     }
   }
 
