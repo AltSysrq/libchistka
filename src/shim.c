@@ -161,7 +161,7 @@ void __attribute__((constructor)) libchistka_init(void) {
  */
 static void post_init(void) {
   /* Use a UNIX socket to talk to the daemon. The socket is located at
-   *   /tmp/prereashim:RUID:PROFILE
+   *   /tmp/prereashim:EUID:PROFILE
    * where PROFILE is the environment variable CHISTKA_PROFILE, or the
    * empty string if that is not defined. Any forward slashes in PROFILE are
    * replaced with backslashes.
@@ -198,7 +198,7 @@ static void post_init(void) {
   /* Construct the address */
   addr.sun_family = AF_UNIX;
   snprintf(addr.sun_path, sizeof(addr.sun_path), "/tmp/chistka:%d:%s",
-           getuid(), profile);
+           geteuid(), profile);
   if (!bind(sock, &addr,
             offsetof(struct sockaddr_un, sun_path) +
             strlen(addr.sun_path) + 1)) {
