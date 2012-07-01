@@ -209,7 +209,7 @@ static void post_init(void) {
       }
 
       /* Switch to daemon process */
-      execlp("prereadshimdaemon", "prereadshimdaemon", NULL);
+      execlp("prereadshimdaemon", "prereadshimdaemon", addr.sun_path, NULL);
 
       /* If we get here, execlp() failed. */
       message = "preread daemon: could not start\n";

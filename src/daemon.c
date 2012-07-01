@@ -66,6 +66,13 @@ static inline void dbgprintf() {}
  */
 static hashset directories_traversed, directories_read;
 
+/* If non-NULL, the file to unlink when the program exits.
+ *
+ * This is probably provided by argv[1], and indicates the name of the socket
+ * the program is obliviously reading from.
+ */
+static char* unlink_at_exit;
+
 static void add_events(char*);
 static void add_one_event(void (*)(char*), char*);
 static void run_events(void);
@@ -79,6 +86,8 @@ static void event_read_siblings(char*);
 static void event_iterate_directory(char*);
 static void event_play_profile(char*);
 static int parent_dir(char*);
+static void close_stdin(int);
+static void cleanup(void);
 
 /* The event queue.
  * Each event stores when it shoud run, as well as the function to call and the
@@ -99,8 +108,11 @@ static FILE* profile_output;
 
 static void signal_ignore(int parm) {}
 
-int main(void) {
+int main(int argc, char** argv) {
   struct sigaction sig = {};
+
+  unlink_at_exit = argv[1];
+  atexit(cleanup);
 
   event_queue = NULL;
   directories_traversed = hs_create();
@@ -115,6 +127,10 @@ int main(void) {
   sig.sa_handler = signal_ignore;
   sigaction(SIGIO, &sig, NULL);
   sigaction(SIGALRM, &sig, NULL);
+
+  /* Close stdin on SIGTERM, causing the program to exit normally. */
+  sig.sa_handler = close_stdin;
+  sigaction(SIGTERM, &sig, NULL);
 
   /* Reconfigure stdin to be ASYNC and NONBLOCK */
   if (-1 == fcntl(STDIN_FILENO, F_SETFL, O_ASYNC|O_NONBLOCK))
@@ -413,4 +429,13 @@ static void event_play_profile(char* infile) {
 
   /* Done reading those files, now open the profile output. */
   profile_output = fopen(infile, "w");
+}
+
+static void cleanup(void) {
+  if (unlink_at_exit)
+    unlink(unlink_at_exit);
+}
+
+static void close_stdin(int parm) {
+  fclose(stdin);
 }
