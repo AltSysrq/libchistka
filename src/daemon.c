@@ -160,7 +160,7 @@ static void read_input(void) {
    * If nothing remains to read, just terminate the program because its
    * usefullness has ceased.
    */
-  if (errno != EAGAIN && errno != EWOULDBLOCK)
+  if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
     exit(0);
   else
     clearerr(stdin);

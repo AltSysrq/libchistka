@@ -92,10 +92,6 @@ that program was created by a call to exec() in a program libprereadshim was
 already loaded into, there is an unavoidable race condition that may cause
 problems.
 
-Since libprereadshim currently uses one daemon per host process, it is not
-really viable to use /etc/ld.conf.preload to globally apply the shim to the
-entire system. Eventually, daemons will be sharable, allowing this to be done.
-
 If a program accesses a file in a directory and seconds later attempts to get
 an exclusive lock in a file within, it may collide with the daemon trying to
 preread that file.

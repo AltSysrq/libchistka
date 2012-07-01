@@ -43,13 +43,16 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <errno.h>
 #include <fnmatch.h>
-#include <stdio.h>
 #include <semaphore.h>
 
 #include "common.h"
@@ -152,54 +155,109 @@ void __attribute__((constructor)) libprereadshim_init(void) {
  * initialised. It is called on the first invocation of open().
  */
 static void post_init(void) {
-  int pipefd[2];
-  char* message;
-  /* Start the preread daemon */
-  /* First, set the PREREADSHIM_DISABLE env variable to prevent recursion */
-  putenv("PREREADSHIM_DISABLE=yes");
-  /* Set the pipe up */
-  if (pipe(pipefd)) {
-    message = "Could not open pipe to daemon; libprereadshim disabled\n";
+  /* Use a UNIX socket to talk to the daemon. The socket is located at
+   *   /tmp/prereashim:RUID:PROFILE
+   * where PROFILE is the environment variable PREREADSHIM_PROFILE, or the
+   * empty string if that is not defined. Any forward slashes in PROFILE are
+   * replaced with backslashes.
+   *
+   * First, try to create the socket with socket(2) and bind(2). If successful,
+   * then there is no daemon for this uid-profile, so fork() and dup2() the
+   * socket to the child's stdin. If it bind failed due to EADDRINUSE, the
+   * socket already exists, so connect() to it and talk to that process.
+   */
+  int sock;
+  struct sockaddr_un addr;
+  char* message, profile[256], * ptr;
+
+  sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+  if (sock == -1) {
+    message = "preread: could not create socket\n";
+#ifdef DEBUG
     write(STDERR_FILENO, message, strlen(message));
+#endif
     shim_enabled = 0;
     return;
   }
-  /* Fork and switch in the child. */
-  lps_daemon = fork();
-  if (!lps_daemon) {
-    /* Child. */
-    close(pipefd[1]); /* Close write end */
-    if (dup2(pipefd[0], STDIN_FILENO)) {
-      close(pipefd[0]);
-      message = "preread daemon: Could not set input pipe up\n";
+
+  /* Get and convert the profile name */
+  if (getenv("PREREAD_PROFILE")) {
+    strncpy(profile, getenv("PREREAD_PROFILE"), sizeof(profile)-1);
+    profile[sizeof(profile)-1] = 0;
+    for (ptr = profile; *ptr; ++ptr)
+      if (*ptr == '/')
+        *ptr = '\\';
+  } else {
+    profile[0] = 0;
+  }
+  /* Construct the address */
+  addr.sun_family = AF_UNIX;
+  snprintf(addr.sun_path, sizeof(addr.sun_path), "/tmp/prereadshim:%d:%s",
+           getuid(), profile);
+  if (!bind(sock, &addr,
+            offsetof(struct sockaddr_un, sun_path) +
+            strlen(addr.sun_path) + 1)) {
+    /* Creation of socket was successful, fork the daemon. */
+    lps_daemon = fork();
+    if (!lps_daemon) {
+      /* Child. */
+      if (dup2(sock, STDIN_FILENO)) {
+        close(sock);
+        message = "preread daemon: Could not set input pipe up\n";
+        write(STDERR_FILENO, message, strlen(message));
+        exit(-1);
+      }
+
+      /* Switch to daemon process */
+      execlp("prereadshimdaemon", "prereadshimdaemon", NULL);
+
+      /* If we get here, execlp() failed. */
+      message = "preread daemon: could not start\n";
       write(STDERR_FILENO, message, strlen(message));
       exit(-1);
     }
-    close(pipefd[0]);
 
-    /* Switch to daemon process */
-    execlp("prereadshimdaemon", "prereadshimdaemon", NULL);
+    if (lps_daemon == -1) {
+      message = "Could not fork preread daemon; libprereadshim disabled\n";
+#ifdef DEBUG
+      write(STDERR_FILENO, message, strlen(message));
+#endif
+      shim_enabled = 0;
+    }
 
-    /* If we get here, execlp() failed. */
-    message = "preread daemon: could not start\n";
+    close(sock);
+
+    /* Unset the PREREADSHIM_DISABLE env variable so it does not affect children
+     * of the host process.
+     */
+    unsetenv("PREREADSHIM_DISABLE");
+  } else if (errno != EADDRINUSE) {
+    /* Some other error, give up. */
+    message = "Could not bind() to daemon socket\n";
+#ifdef DEBUG
     write(STDERR_FILENO, message, strlen(message));
-    exit(-1);
-  }
-
-  if (lps_daemon == -1) {
-    message = "Could not fork preread daemon; libprereadshim disabled\n";
-    write(STDERR_FILENO, message, strlen(message));
+#endif
     shim_enabled = 0;
+    return;
   }
 
-  /* Keep the write end of the pipe, discard read end */
-  command_output = pipefd[1];
-  close(pipefd[0]);
+  /* Connect to the now-running daemon */
+  sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+  if (sock == -1 ||
+      connect(sock, &addr,
+              offsetof(struct sockaddr_un, sun_path) +
+              strlen(addr.sun_path) + 1)) {
+    message = "Could not connect() to daemon\n";
+#ifdef DEBUG
+    write(STDERR_FILENO, message, strlen(message));
+#endif
+    shim_enabled = 0;
 
-  /* Unset the PREREADSHIM_DISABLE env variable so it does not affect children
-   * of the host process.
-   */
-  unsetenv("PREREADSHIM_DISABLE");
+    if (sock != -1)
+      close(sock);
+  } else {
+    command_output = sock;
+  }
 
   /* Allocate structures */
   deny_exempt = hs_create();
@@ -238,6 +296,7 @@ int open(__const char* pathname, int flags, ...) {
     /* Wait until success or an error that is not interruption.
      * If waiting errors for any other reason, continue on and hope for the
      * best.
+
      */
     while (sem_wait(&semaphore) && errno == EINTR);
 
