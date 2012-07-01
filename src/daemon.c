@@ -48,7 +48,7 @@ SUCH DAMAGE.
  *
  * It is the responsibility of the source to ensure that no filenames sent
  * contain newlines and to not send filenames longer than
- * PREREAD_MAX_FILENAME_LEN as defined in common.h.
+ * CHISTKA_MAX_FILENAME_LEN as defined in common.h.
  */
 
 #include "hashset.h"
@@ -154,7 +154,7 @@ int main(int argc, char** argv) {
  * process does not block.
  */
 static void read_input(void) {
-  char filename[PREREAD_MAX_FILENAME_LEN+2]; /* +2 for LF and NUL */
+  char filename[CHISTKA_MAX_FILENAME_LEN+2]; /* +2 for LF and NUL */
   while (fgets(filename, sizeof(filename), stdin)) {
     if (!filename[0]) continue;
     /* Remove the trailing newline */
@@ -207,7 +207,7 @@ static void add_events(char* filename) {
 }
 
 /* Adds the given event to the event queue, scheduling it for
- * $PREREADSHIM_DELAY seconds in the future.
+ * $CHISTKA_DELAY seconds in the future.
  */
 static void add_one_event(void (*f)(char*), char* datum) {
   time_t when;
@@ -218,8 +218,8 @@ static void add_one_event(void (*f)(char*), char* datum) {
   if (!has_offset) {
     has_offset = 1;
     offset = 5;
-    if (getenv("PREREADSHIM_DELAY"))
-      offset = atoi(getenv("PREREADSHIM_DELAY"));
+    if (getenv("CHISTKA_DELAY"))
+      offset = atoi(getenv("CHISTKA_DELAY"));
   }
   when = time(NULL) + offset;
 
@@ -288,8 +288,8 @@ static void run_events(void) {
 }
 
 static void profile_open(void) {
-  if (getenv("PREREADSHIM_PROFILE"))
-    add_one_event(event_play_profile, getenv("PREREADSHIM_PROFILE"));
+  if (getenv("CHISTKA_PROFILE"))
+    add_one_event(event_play_profile, getenv("CHISTKA_PROFILE"));
 }
 
 static void profile_log(char* filename) {
@@ -336,8 +336,8 @@ static void event_read_siblings(char* directory) {
   if (!has_read_limit) {
     has_read_limit = 1;
     read_limit = 16;
-    if (getenv("PREREADSHIM_SIBLINGS"))
-      read_limit = atoi(getenv("PREREADSHIM_SIBLINGS"));
+    if (getenv("CHISTKA_SIBLINGS"))
+      read_limit = atoi(getenv("CHISTKA_SIBLINGS"));
 
     read_limit *= 1024*1024;
   }
@@ -402,8 +402,8 @@ static void event_play_profile(char* infile) {
   unsigned limit, data_read, amt;
 
   limit = 16*1024*1024;
-  if (getenv("PREREADSHIM_PREREAD"))
-    limit = atoi(getenv("PREREADSHIM_PREREAD"))*1024*1024;
+  if (getenv("CHISTKA_PREREAD"))
+    limit = atoi(getenv("CHISTKA_PREREAD"))*1024*1024;
 
   data_read = 0;
 

@@ -83,8 +83,8 @@ static int command_output;
 /* The pid of the daemon process. Zero if none. */
 static pid_t lps_daemon;
 
-/* Whether to enable libprereadshim or to just pass through to libc open. The
- * latter is done for the preread daemon so the library does not recurse.
+/* Whether to enable libchistka or to just pass through to libc open. The
+ * latter is done for the chistka daemon so the library does not recurse.
  */
 static int shim_enabled;
 
@@ -97,15 +97,15 @@ static hashset deny_exempt;
 /* Returns whether the given file's existence should be denied. */
 static int should_deny(char* name);
 
-/* Returns the readahead amount (overridable in PREREADSHIM_READAHEAD) in
+/* Returns the readahead amount (overridable in CHISTKA_READAHEAD) in
  * megabytes.
  */
 static unsigned config_readahead() {
   static int has_extracted = 0;
   static unsigned value = 64;
 
-  if (!has_extracted && getenv("PREREADSHIM_READAHEAD"))
-    value = atoi(getenv("PREREADSHIM_READAHEAD"));
+  if (!has_extracted && getenv("CHISTKA_READAHEAD"))
+    value = atoi(getenv("CHISTKA_READAHEAD"));
 
   has_extracted = 1;
   return value;
@@ -121,7 +121,7 @@ static unsigned config_readahead() {
  *
  * Initialises copen, shim_enabled, semaphore
  */
-void __attribute__((constructor)) libprereadshim_init(void) {
+void __attribute__((constructor)) libchistka_init(void) {
   char* message;
 
   execution_start_time = time(NULL);
@@ -139,7 +139,7 @@ void __attribute__((constructor)) libprereadshim_init(void) {
   }
 
   /* See if further operation is disabled */
-  if (getenv("PREREADSHIM_DISABLE")) {
+  if (getenv("CHISTKA_DISABLE")) {
     shim_enabled = 0;
     return;
   }
@@ -157,7 +157,7 @@ void __attribute__((constructor)) libprereadshim_init(void) {
 static void post_init(void) {
   /* Use a UNIX socket to talk to the daemon. The socket is located at
    *   /tmp/prereashim:RUID:PROFILE
-   * where PROFILE is the environment variable PREREADSHIM_PROFILE, or the
+   * where PROFILE is the environment variable CHISTKA_PROFILE, or the
    * empty string if that is not defined. Any forward slashes in PROFILE are
    * replaced with backslashes.
    *
@@ -172,7 +172,7 @@ static void post_init(void) {
 
   sock = socket(AF_UNIX, SOCK_DGRAM, 0);
   if (sock == -1) {
-    message = "preread: could not create socket\n";
+    message = "chistka: could not create socket\n";
 #ifdef DEBUG
     write(STDERR_FILENO, message, strlen(message));
 #endif
@@ -181,8 +181,8 @@ static void post_init(void) {
   }
 
   /* Get and convert the profile name */
-  if (getenv("PREREAD_PROFILE")) {
-    strncpy(profile, getenv("PREREAD_PROFILE"), sizeof(profile)-1);
+  if (getenv("CHISTKA_PROFILE")) {
+    strncpy(profile, getenv("CHISTKA_PROFILE"), sizeof(profile)-1);
     profile[sizeof(profile)-1] = 0;
     for (ptr = profile; *ptr; ++ptr)
       if (*ptr == '/')
@@ -192,7 +192,7 @@ static void post_init(void) {
   }
   /* Construct the address */
   addr.sun_family = AF_UNIX;
-  snprintf(addr.sun_path, sizeof(addr.sun_path), "/tmp/prereadshim:%d:%s",
+  snprintf(addr.sun_path, sizeof(addr.sun_path), "/tmp/chistka:%d:%s",
            getuid(), profile);
   if (!bind(sock, &addr,
             offsetof(struct sockaddr_un, sun_path) +
@@ -203,22 +203,22 @@ static void post_init(void) {
       /* Child. */
       if (dup2(sock, STDIN_FILENO)) {
         close(sock);
-        message = "preread daemon: Could not set input pipe up\n";
+        message = "chistka daemon: Could not set input pipe up\n";
         write(STDERR_FILENO, message, strlen(message));
         exit(-1);
       }
 
       /* Switch to daemon process */
-      execlp("prereadshimdaemon", "prereadshimdaemon", addr.sun_path, NULL);
+      execlp("chistkad", "chistkad", addr.sun_path, NULL);
 
       /* If we get here, execlp() failed. */
-      message = "preread daemon: could not start\n";
+      message = "chistka daemon: could not start\n";
       write(STDERR_FILENO, message, strlen(message));
       exit(-1);
     }
 
     if (lps_daemon == -1) {
-      message = "Could not fork preread daemon; libprereadshim disabled\n";
+      message = "Could not fork chistka daemon; libchistka disabled\n";
 #ifdef DEBUG
       write(STDERR_FILENO, message, strlen(message));
 #endif
@@ -227,10 +227,10 @@ static void post_init(void) {
 
     close(sock);
 
-    /* Unset the PREREADSHIM_DISABLE env variable so it does not affect children
+    /* Unset the CHISTKA_DISABLE env variable so it does not affect children
      * of the host process.
      */
-    unsetenv("PREREADSHIM_DISABLE");
+    unsetenv("CHISTKA_DISABLE");
   } else if (errno != EADDRINUSE) {
     /* Some other error, give up. */
     message = "Could not bind() to daemon socket\n";
@@ -267,7 +267,7 @@ int open(__const char* pathname, int flags, ...) {
   va_list args;
   mode_t mode;
   int fd;
-  char discard[4096], daemon_input[PREREAD_MAX_FILENAME_LEN+2];
+  char discard[4096], daemon_input[CHISTKA_MAX_FILENAME_LEN+2];
   unsigned buffers_read, readahead_amt, len;
   struct stat stat;
   off_t old_pos;
@@ -281,7 +281,7 @@ int open(__const char* pathname, int flags, ...) {
    * most programs implicitly call open() during linking etc, so this will
    * generally not be a problem.
    */
-  if (!copen) libprereadshim_init();
+  if (!copen) libchistka_init();
 
   va_start(args, flags);
   mode = va_arg(args, mode_t);
@@ -371,7 +371,7 @@ int open(__const char* pathname, int flags, ...) {
   if (((flags & O_RDONLY) == O_RDONLY ||
        (flags & O_RDWR  ) == O_RDWR) &&
       !strchr(pathname, '\n') &&
-      strlen(pathname) <= PREREAD_MAX_FILENAME_LEN &&
+      strlen(pathname) <= CHISTKA_MAX_FILENAME_LEN &&
       command_output) {
     /* If the pathname does not begin with a /, add the current working
      * directory to the pathname followed by a slash.
@@ -419,7 +419,7 @@ static int should_deny(char* name) {
   if (hs_test(deny_exempt, name)) return 0;
 
   /* Does it match any glob pattern? */
-  denylist = getenv("PREREADSHIM_DENY");
+  denylist = getenv("CHISTKA_DENY");
   if (!denylist) return 0; /* No deny list configured */
   /* Make copy since strtok modifies it. */
   denylist = strdup(denylist);

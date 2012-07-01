@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([libprereadshim], [0.0.1], [jasonlingle@yahoo.com])
+AC_INIT([libchistka], [0.0.1], [jasonlingle@yahoo.com])
 AM_INIT_AUTOMAKE
 AC_CONFIG_MACRO_DIR([m4])
 LT_PREREQ([1.5])
