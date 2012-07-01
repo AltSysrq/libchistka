@@ -11,8 +11,8 @@ be handled by libeatmydata.)
 
 libprereadshim uses five methods to mitigate the read problem:
 
-1. Programs usually use mostly the same files on each run. The first 8 MB (by
-default) of files read by the program more than 15 (by default) seconds after
+1. Programs usually use mostly the same files on each run. The first 16 MB (by
+default) of files read by the program more than 5 (by default) seconds after
 the program started are automatically read in when it starts.
 
 2. Traversing one part of a directory usually results in traversing more of
