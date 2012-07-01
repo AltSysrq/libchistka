@@ -1,13 +1,22 @@
 libchistka
 
+INTRODUCTION
+
 libchistka is a layer that can be inserted between the OS's system calls and
-another program. It essentially attempts to solve the opposite problem as
-libeatmydata: programs which make isolated, small reads.
+another program. It attempts to remedy power drain caused by programs which
+perform IO irresponsibly.
+
+THE READ PROBLEM
+
+A number of programs will open a file for reading, then slowly read it in, or
+jump around reading small pieces. If enough time elapses between these reads,
+the harddisk may have spun down and will then need to spin back up. Power is
+lost both by the new spinup of the disk, as well as the time it spent idly
+spinning waiting for new reads.
 
 An example of this problem is Firefox. Whenever a website is accessed, it will
 check for a cookie or other such data, often spinning the HDD back up just for
-a miniscule data access. (The other problem of Firefox fsync()ing A LOT should
-be handled by libeatmydata.)
+a miniscule data access.
 
 libchistka uses five methods to mitigate the read problem:
 
@@ -31,6 +40,27 @@ background.
 
 5. libchistka may be configured to deny the existence of files matching certain
 patterns.
+
+THE FSYNC PROBLEM
+
+Normally, a program uses fsync() or such because it is important. For example,
+you saved a file in your text editor, so you want to make sure it actually
+makes it to disk, in case the system crashes or you lose power. On a system
+like a netbook though, neither of these are a risk if the OS is stable, and the
+programs which abuse fsync() become a problem.
+
+Firefox again is a good example of an abuser. It normally fsync()s a few times
+for every cookie modification and every history addition, waking the hard disk
+up for almost every page load.
+
+libchistka replaces fsync() and friends (msync(), sync(), syncfs(), and
+fdatasync()) with no-ops, and removes O_SYNC, O_DSYNC, and O_RSYNC flags from
+calls to open(). The end effect is better performance and less disk awakening,
+in exchange for losing all guarantees of data integrity.
+
+(This functionality is a rough clone of libeatmydata.)
+
+INSTALLING
 
 Dependencies:
   Just make and a C compiler. GNU Autotools as well if working directly from

@@ -45,6 +45,7 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/mman.h>
 #include <fcntl.h>
 #include <time.h>
 #include <stdlib.h>
@@ -61,6 +62,10 @@
 #ifndef RTLD_NEXT
 #error RTLD_NEXT undefined; please provide a definition of the constant if your\
  system supports it
+#endif
+
+#ifndef PAGESIZE
+#define PAGESIZE sysconf(_SC_PAGE_SIZE)
 #endif
 
 /* Semaphore to lock state shared in the open() implementation etc.
@@ -323,7 +328,10 @@ int open(__const char* pathname, int flags, ...) {
     }
   }
 
-  /* No other instruction, return normally */
+  /* Remove requests for synchronicity */
+  flags &= ~(O_SYNC|O_DSYNC|O_RSYNC);
+
+  /* No other instruction, open normally */
   fd = (*copen)(pathname, flags, mode);
 
   if (fd == -1) RETURN(-1);
@@ -439,5 +447,46 @@ static int should_deny(char* name) {
 
   /* Nothing matches, allow. */
   free(denylist);
+  return 0;
+}
+
+int fsync(int fd) {
+  /* Do nothing, but make sure fd is valid. */
+  errno = 0;
+  return fcntl(fd, F_GETFD, 0) == -1? -1 : 0;
+}
+
+int fdatasync(int fd) {
+  return fsync(fd);
+}
+
+void sync(void) {}
+int syncfs(int fd) {
+  return fsync(fd);
+}
+
+int mysnc(void* addr, size_t length, int flags) {
+  /* Do nothing, but check for errors for compatibility. */
+
+  /* EINVAL: "addr is not a multiple of PAGESIZE" */
+  if (((unsigned)addr) % PAGESIZE) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* EINVAL: "any bit other than MS_ASYNC|MS_INVALIDATE|MS_SYNC is set in
+   * flags"
+   */
+  if (flags & ~(MS_ASYNC|MS_INVALIDATE|MS_SYNC)) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* ENOMEM: "The indicated memory (or part of it) was not mapped" */
+  /* We have no easy way of determining this. Let's hope nothing depends on
+   * this behaviour.
+   */
+
+  errno = 0;
   return 0;
 }
