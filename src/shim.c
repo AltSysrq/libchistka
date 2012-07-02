@@ -567,11 +567,13 @@ int poll(struct pollfd* fds, nfds_t cnt, int timeout) {
 
   /* Disable FDs being polled the wrong way */
   memset(disabled, 0, sizeof(disabled));
-  for (i = 0; i < (unsigned)cnt; ++i) {
-    if (fds[i].fd > 0 && fds[i].fd < NUM_POLL_IGNORED &&
-        poll_ignored[fds[i].fd] > ignore_limit) {
-      disabled[i] = 1;
-      fds[i].fd = -fds[i].fd;
+  if (ignore_limit != -1) {
+    for (i = 0; i < (unsigned)cnt; ++i) {
+      if (fds[i].fd > 0 && fds[i].fd < NUM_POLL_IGNORED &&
+          poll_ignored[fds[i].fd] > (unsigned)ignore_limit) {
+        disabled[i] = 1;
+        fds[i].fd = -fds[i].fd;
+      }
     }
   }
 
