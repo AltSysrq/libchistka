@@ -55,6 +55,7 @@
 #include <errno.h>
 #include <fnmatch.h>
 #include <semaphore.h>
+#include <poll.h>
 
 #include "common.h"
 #include "hashset.h"
@@ -77,6 +78,28 @@ static sem_t semaphore;
  * rather whether it could be opened at all.
  */
 static int has_semaphore;
+static inline void lock(void) {
+  int old_errno = errno;
+  errno = 0;
+  if (has_semaphore)
+    /* Wait until success or an error that is not interruption.
+     * If waiting errors for any other reason, continue on and hope for the
+     * best.
+     */
+    while (sem_wait(&semaphore) && errno == EINTR);
+
+  errno = old_errno;
+}
+static inline void unlock(void) {
+  int old_errno;
+  /* Release the semaphore.
+   * First, preserve the old errno in case sem_post somehow fails.
+   */
+  old_errno = errno;
+  if (has_semaphore)
+    sem_post(&semaphore);
+  errno = old_errno;
+}
 
 /* The time the program began exectution */
 static time_t execution_start_time;
@@ -95,6 +118,10 @@ static int shim_enabled;
 
 /* The open() function from the next library in the chain (usually libc). */
 static int (*copen)(const char*, int, ...) = NULL;
+/* Similar */
+static int (*cpoll)(struct pollfd*, nfds_t, int) = NULL;
+static ssize_t (*cread)(int, void*, size_t) = NULL;
+static ssize_t (*cwrite)(int, void*, size_t) = NULL;
 
 /* Set of files exempted from the DENY option. */
 static hashset deny_exempt;
@@ -135,13 +162,18 @@ void __attribute__((constructor)) libchistka_init(void) {
 
   /* Get the next open() function */
   dlerror(); /* Clear any DL error */
-  copen = dlsym(RTLD_NEXT, "open"); /* Get the symbol */
-  /* Check for failure */
-  if (message = dlerror()) {
-    /* Try to print to stderr (though this mightn't work) */
-    write(STDERR_FILENO, message, strlen(message));
-    exit(-1);
+#define SYMBOL(symbol) \
+  c##symbol = dlsym(RTLD_NEXT, #symbol); \
+  if (message = dlerror()) { \
+    if (cwrite) \
+      (*cwrite)(STDERR_FILENO, message, strlen(message)); \
+    exit(-1); \
   }
+  SYMBOL(write);
+  SYMBOL(read);
+  SYMBOL(open);
+  SYMBOL(poll);
+#undef SYMBOL
 
   /* See if further operation is disabled */
   if (getenv("CHISTKA_DISABLE")) {
@@ -276,7 +308,7 @@ int open(__const char* pathname, int flags, ...) {
   unsigned buffers_read, readahead_amt, len;
   struct stat stat;
   off_t old_pos;
-  int status, old_errno;
+  int status;
 
   /* It is possible the constructor function won't be called.
    * Detect this and call it now.
@@ -297,13 +329,7 @@ int open(__const char* pathname, int flags, ...) {
     return (*copen)(pathname, flags, mode);
 
   /* Entering shared state. If we have a semaphore, lock it now. */
-  if (has_semaphore)
-    /* Wait until success or an error that is not interruption.
-     * If waiting errors for any other reason, continue on and hope for the
-     * best.
-
-     */
-    while (sem_wait(&semaphore) && errno == EINTR);
+  lock();
 
 #define RETURN(value) do { status = value; goto end; } while(0)
 
@@ -411,13 +437,8 @@ int open(__const char* pathname, int flags, ...) {
   RETURN(fd);
 
   end:
-  /* Leaving use of shared state, release the semaphore if there is one.
-   * First, preserve the old errno in case sem_post somehow fails.
-   */
-  old_errno = errno;
-  if (has_semaphore)
-    sem_post(&semaphore);
-  errno = old_errno;
+  /* Leaving use of shared state, release the semaphore if there is one. */
+  unlock();
   return status;
 }
 
@@ -489,4 +510,120 @@ int mysnc(void* addr, size_t length, int flags) {
 
   errno = 0;
   return 0;
+}
+
+/* Tracks the number of times the file descriptors 0..255 have been polled
+ * without being read or written. Values are only incremented when poll() exits
+ * for a reason other than timeout or error. Whenever read() or write()
+ * operates successfully on one of these which was non-zero, the entire array
+ * is reset to zero. Otherwise, any read() or write() simply sets its own entry
+ * to zero.
+ *
+ * When an entry exceeds $CHISTKA_POLL_IGNORE (default disabled), poll() will
+ * ignore attempts to use that fd in the call.
+ */
+#define NUM_POLL_IGNORED 256
+static unsigned poll_ignored[NUM_POLL_IGNORED] = {0};
+
+int poll(struct pollfd* fds, nfds_t cnt, int timeout) {
+  static int timeout_limit, ignore_limit, has_parms = 0;
+  /* The indices of the items that were disabled due to neglect */
+  char disabled[cnt];
+  unsigned i;
+  int status;
+
+  /* Initialise if this hasn't happened yet.
+   * Don't bother with the daemon, since we won't need it.
+   */
+  if (!cpoll)
+    libchistka_init();
+
+  /* Lock the shared structures */
+  lock();
+
+  /* Get environment parms if we don't have them yet */
+  if (!has_parms) {
+    has_parms = 1;
+
+    timeout_limit = 1024;
+    ignore_limit = -1;
+    if (getenv("CHISTKA_POLL_TIMEOUT"))
+      timeout_limit = atoi(getenv("CHISTKA_POLL_TIMEOUT"));
+    if (getenv("CHISTKA_POLL_IGNORE"))
+      ignore_limit = atoi(getenv("CHISTKA_POLL_IGNORE"));
+  }
+
+  /* Adjust the timeout if needed */
+  if (timeout_limit == -1)
+    timeout = -1;
+  else if (timeout > 0 && timeout < timeout_limit)
+    timeout = timeout_limit;
+
+  /* Disable FDs being polled the wrong way */
+  memset(disabled, 0, sizeof(disabled));
+  for (i = 0; i < (unsigned)cnt; ++i) {
+    if (fds[i].fd > 0 && fds[i].fd < NUM_POLL_IGNORED &&
+        poll_ignored[fds[i].fd] > ignore_limit) {
+      disabled[i] = 1;
+      fds[i].fd = -fds[i].fd;
+    }
+  }
+
+  /* Release the lock so that we don't block other poll()s or open()s on other
+   * threads, then call the actual function.
+   */
+  unlock();
+  status = (*cpoll)(fds, cnt, timeout);
+  lock();
+
+  /* If successful and not timed out, increment all polled fds */
+  if (status > 0) {
+    for (i = 0; i < (unsigned)cnt; ++i) {
+      if (fds[i].fd > 0 && fds[i].fd < NUM_POLL_IGNORED)
+        ++poll_ignored[fds[i].fd];
+    }
+  }
+
+  /* Reset fds wherever we disabled something */
+  for (i = 0; i < (unsigned)cnt; ++i) {
+    if (disabled[i]) {
+      fds[i].fd = -fds[i].fd;
+    }
+  }
+
+  /* Done */
+  unlock();
+  return status;
+}
+
+static ssize_t read_write_common(int fd, void* buff, size_t count,
+                                 ssize_t (*f)(int, void*, size_t)) {
+  ssize_t status;
+  status = (*f)(fd, buff, count);
+  /* We don't need to lock the below since the only modifications to shared
+   * structure involve setting values to zero. Any interference with poll()
+   * will simply result in poll() seing values somewhere between what they were
+   * and zero.
+   */
+  if (fd >= 0 && fd < NUM_POLL_IGNORED) {
+    /* If successful (to any extent) and this read has been poll()ed before,
+     * reset all to zero.
+     */
+    if (status > 0 && poll_ignored[fd])
+      memset(poll_ignored, 0, sizeof(poll_ignored));
+    else
+      poll_ignored[fd] = 0;
+  }
+
+  return status;
+}
+
+ssize_t read(int fd, void* buff, size_t count) {
+  if (!cread) libchistka_init();
+  return read_write_common(fd, buff, count, cread);
+}
+
+ssize_t write(int fd, __const void* buff, size_t count) {
+  if (!cwrite) libchistka_init();
+  return read_write_common(fd, (void*)buff, count, cwrite);
 }

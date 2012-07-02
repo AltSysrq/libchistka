@@ -60,6 +60,28 @@ in exchange for losing all guarantees of data integrity.
 
 (This functionality is a rough clone of libeatmydata.)
 
+THE IRRELEVANT POLL PROBLEM
+
+Some programs can be observed (with strace) to poll() a set of several files,
+and then only checking a couple when poll() returns. This causes the program to
+wake up often and accomplish nothing, thus needlessly keeping the CPU in higher
+energy states and resulting in a few more context switches.
+
+Some X programs are also guilty of using a needlessly small timeout with
+poll(), exacerbating the problem.
+
+libchistka works around this by rewriting calls to poll() to account for two
+things. First, file descriptors which are repeatedly poll()ed then ignored will
+be deleted from poll() calls. Secondly, the timout, when not negative
+(indicating infinity), is clamped to a minimum, defaut 1 second. The former is
+disabled by default since it could break programs which actually use poll()
+entirely correctly.
+
+(Firefox can be observed to poll() with a timeout of 0 several times per
+second, even when idle. Forcing the delay on it kills responsiveness, which
+would suggest it doesn't poll() X... for the time being, the above worarounds
+don't help Firefox.)
+
 INSTALLING
 
 Dependencies:
@@ -112,6 +134,15 @@ to CHISTKA_PREREAD megabytes. CHISTKA_PREREAD defaults to 16 megabytes.
 
 The environment variable CHISTKA_SIBLINGS can be set to indicate the number of
 megabytes to read from sibling files an a directory. By default it is 16.
+
+CHISTKA_POLL_TIMEOUT indicates the minimum duration of the timeout in calls to
+poll(), in milliseconds. The default is 1024. Specifying a negative value
+forces all timeouts to infinity; this is probably a bad idea for most programs
+and should be used with care.
+
+The number of times a file descriptor can be poll()ed and ignored can be
+changed with CHISTKA_POLL_IGNORE. It defaults to -1. Setting it to -1
+effectively disables this behaviour.
 
 ISSUES
 
