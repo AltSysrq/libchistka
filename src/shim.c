@@ -292,6 +292,12 @@ static void post_init(void) {
 
     if (sock != -1)
       close(sock);
+
+    /* Unlink the socket file if possible.
+     * If something happened to the daemon, the next program will then restart
+     * it.
+     */
+    unlink(addr.sun_path);
   } else {
     command_output = sock;
   }
