@@ -244,6 +244,10 @@ static void post_init(void) {
 #ifdef DEBUG
         write(STDERR_FILENO, message, strlen(message));
 #endif
+
+        /* Remove the socket file so nobody else connects to it. */
+        unlink(addr.sun_path);
+
         exit(-1);
       }
 
@@ -255,6 +259,8 @@ static void post_init(void) {
 #ifdef DEBUG
       write(STDERR_FILENO, message, strlen(message));
 #endif
+      /* Remove the socket file so nobody else connects to it. */
+      unlink(addr.sun_path);
       exit(-1);
     }
 
@@ -264,6 +270,8 @@ static void post_init(void) {
       write(STDERR_FILENO, message, strlen(message));
 #endif
       shim_enabled = 0;
+      /* Remove the socket file so nobody else connects to it. */
+      unlink(addr.sun_path);
     }
 
     close(sock);
