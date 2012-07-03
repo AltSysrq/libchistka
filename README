@@ -144,6 +144,10 @@ The number of times a file descriptor can be poll()ed and ignored can be
 changed with CHISTKA_POLL_IGNORE. It defaults to -1. Setting it to -1
 effectively disables this behaviour.
 
+Setting the environment variable CHISTKA_DISABLE to anything disables ALL
+special behaviour provided by the shim, and causes all calls to be passed to
+the standard C library (or whatever follows chistka in the chain) verbatim.
+
 ISSUES
 
 In the rare case of a program spawning multiple threads before any call to

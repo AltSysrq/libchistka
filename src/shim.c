@@ -122,6 +122,11 @@ static int (*copen)(const char*, int, ...) = NULL;
 static int (*cpoll)(struct pollfd*, nfds_t, int) = NULL;
 static ssize_t (*cread)(int, void*, size_t) = NULL;
 static ssize_t (*cwrite)(int, void*, size_t) = NULL;
+static void (*csync)(void) = NULL;
+static int (*csyncfs)(int) = NULL;
+static int (*cfsync)(int) = NULL;
+static int (*cfdatasync)(int) = NULL;
+static int (*cmsync)(void*, size_t, int) = NULL;
 
 /* Set of files exempted from the DENY option. */
 static hashset deny_exempt;
@@ -173,6 +178,11 @@ static void __attribute__((constructor)) libchistka_init(void) {
   SYMBOL(read);
   SYMBOL(open);
   SYMBOL(poll);
+  SYMBOL(sync);
+  SYMBOL(syncfs);
+  SYMBOL(fsync);
+  SYMBOL(fdatasync);
+  SYMBOL(msync);
 #undef SYMBOL
 
   /* See if further operation is disabled */
@@ -265,11 +275,11 @@ static void post_init(void) {
     }
 
     if (lps_daemon == -1) {
-      message = "Could not fork chistka daemon; libchistka disabled\n";
+      message = "Could not fork chistka daemon\n";
 #ifdef DEBUG
       write(STDERR_FILENO, message, strlen(message));
 #endif
-      shim_enabled = 0;
+      command_output = 0;
       /* Remove the socket file so nobody else connects to it. */
       unlink(addr.sun_path);
     }
@@ -286,7 +296,7 @@ static void post_init(void) {
 #ifdef DEBUG
     write(STDERR_FILENO, message, strlen(message));
 #endif
-    shim_enabled = 0;
+    command_output = 0;
     return;
   }
 
@@ -300,7 +310,7 @@ static void post_init(void) {
 #ifdef DEBUG
     write(STDERR_FILENO, message, strlen(message));
 #endif
-    shim_enabled = 0;
+    command_output = 0;
 
     if (sock != -1)
       close(sock);
@@ -505,21 +515,50 @@ static int should_deny(char* name) {
 }
 
 int fsync(int fd) {
+  if (!cfsync)
+    libchistka_init();
+  if (!shim_enabled)
+    return (*cfsync)(fd);
+
   /* Do nothing, but make sure fd is valid. */
   errno = 0;
   return fcntl(fd, F_GETFD, 0) == -1? -1 : 0;
 }
 
 int fdatasync(int fd) {
+  if (!cfdatasync)
+    libchistka_init();
+  if (!shim_enabled)
+    return (*cfdatasync)(fd);
+
   return fsync(fd);
 }
 
-void sync(void) {}
+void sync(void) {
+  if (!csync)
+    libchistka_init();
+
+  if (!shim_enabled)
+    (*csync)();
+}
+
 int syncfs(int fd) {
+  if (!csyncfs)
+    libchistka_init();
+
+  if (!shim_enabled)
+    return (*csyncfs)(fd);
+
   return fsync(fd);
 }
 
-int mysnc(void* addr, size_t length, int flags) {
+int msync(void* addr, size_t length, int flags) {
+  if (!cmsync)
+    libchistka_init();
+
+  if (!shim_enabled)
+    return (*cmsync)(addr, length, flags);
+
   /* Do nothing, but check for errors for compatibility. */
 
   /* EINVAL: "addr is not a multiple of PAGESIZE" */
@@ -570,6 +609,9 @@ int poll(struct pollfd* fds, nfds_t cnt, int timeout) {
    */
   if (!cpoll)
     libchistka_init();
+
+  if (!shim_enabled)
+    return (*cpoll)(fds, cnt, timeout);
 
   /* Lock the shared structures */
   lock();
