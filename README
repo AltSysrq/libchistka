@@ -73,7 +73,7 @@ poll(), exacerbating the problem.
 libchistka works around this by rewriting calls to poll() to account for two
 things. First, file descriptors which are repeatedly poll()ed then ignored will
 be deleted from poll() calls. Secondly, the timout, when not negative
-(indicating infinity), is clamped to a minimum, defaut 1 second. The former is
+(indicating infinity), is clamped to a minimum, defaut 1 second. Both are
 disabled by default since it could break programs which actually use poll()
 entirely correctly.
 
@@ -136,9 +136,9 @@ The environment variable CHISTKA_SIBLINGS can be set to indicate the number of
 megabytes to read from sibling files an a directory. By default it is 16.
 
 CHISTKA_POLL_TIMEOUT indicates the minimum duration of the timeout in calls to
-poll(), in milliseconds. The default is 1024. Specifying a negative value
-forces all timeouts to infinity; this is probably a bad idea for most programs
-and should be used with care.
+poll(), in milliseconds. The default is 0. Specifying a negative value forces
+all timeouts to infinity; this is probably a bad idea for most programs and
+should be used with care.
 
 The number of times a file descriptor can be poll()ed and ignored can be
 changed with CHISTKA_POLL_IGNORE. It defaults to -1. Setting it to -1

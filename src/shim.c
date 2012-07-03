@@ -555,7 +555,7 @@ int poll(struct pollfd* fds, nfds_t cnt, int timeout) {
   if (!has_parms) {
     has_parms = 1;
 
-    timeout_limit = 1024;
+    timeout_limit = 0;
     ignore_limit = -1;
     if (getenv("CHISTKA_POLL_TIMEOUT"))
       timeout_limit = atoi(getenv("CHISTKA_POLL_TIMEOUT"));
