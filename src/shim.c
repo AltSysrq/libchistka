@@ -153,7 +153,7 @@ static unsigned config_readahead() {
  *
  * Initialises copen, shim_enabled, semaphore
  */
-void __attribute__((constructor)) libchistka_init(void) {
+static void __attribute__((constructor)) libchistka_init(void) {
   char* message;
 
   execution_start_time = time(NULL);
