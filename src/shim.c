@@ -334,7 +334,7 @@ int open(__const char* pathname, int flags, ...) {
   unsigned buffers_read, readahead_amt, len;
   struct stat stat;
   off_t old_pos;
-  int status;
+  int status, old_errno = errno;
 
   /* It is possible the constructor function won't be called.
    * Detect this and call it now.
@@ -385,6 +385,7 @@ int open(__const char* pathname, int flags, ...) {
 
   /* No other instruction, open normally */
   fd = (*copen)(pathname, flags, mode);
+  old_errno = errno;
 
   if (fd == -1) RETURN(-1);
 
@@ -470,6 +471,7 @@ int open(__const char* pathname, int flags, ...) {
   end:
   /* Leaving use of shared state, release the semaphore if there is one. */
   unlock();
+  errno = old_errno;
   return status;
 }
 
