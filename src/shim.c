@@ -241,7 +241,9 @@ static void post_init(void) {
       if (dup2(sock, STDIN_FILENO)) {
         close(sock);
         message = "chistka daemon: Could not set input pipe up\n";
+#ifdef DEBUG
         write(STDERR_FILENO, message, strlen(message));
+#endif
         exit(-1);
       }
 
@@ -250,7 +252,9 @@ static void post_init(void) {
 
       /* If we get here, execlp() failed. */
       message = "chistka daemon: could not start\n";
+#ifdef DEBUG
       write(STDERR_FILENO, message, strlen(message));
+#endif
       exit(-1);
     }
 
