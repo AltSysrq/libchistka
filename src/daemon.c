@@ -111,6 +111,12 @@ static void signal_ignore(int parm) {}
 int main(int argc, char** argv) {
   struct sigaction sig = {};
 
+  /* Ensuring that we are in a separate group and session if possible prevents
+   * us from being killed by infantcidal hosts.
+   */
+  setpgid(0,0);
+  setsid();
+
   unlink_at_exit = argv[1];
   atexit(cleanup);
 
