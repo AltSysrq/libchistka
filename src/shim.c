@@ -312,6 +312,14 @@ static void post_init(void) {
     unlink(addr.sun_path);
   } else {
     command_output = sock;
+    /* Make it non-blocking so that if the daemon gets stuck or KILLed, it
+     * won't negatively affect the host process.
+     */
+    if (fcntl(sock, F_SETFL, O_NONBLOCK)) {
+#ifdef DEBUG
+      perror("chistka: fcntl");
+#endif
+    }
   }
 
   /* Allocate structures */
@@ -440,14 +448,19 @@ int open(__const char* pathname, int flags, ...) {
       len = strlen(daemon_input);
       if (len > 0 && daemon_input[len-1] == '\n' &&
           len != write(command_output, daemon_input, len)) {
-        /* Something went wrong, close the stream and send no more commands.
-         *
-         * Printing a diagnostic is inappropriate at this point since we're in
-         * the middle of the host's execution and it may be using stderr for
-         * something.
+        /* Not an error if we get EAGAIN or EWOULDBLOCK: The daemon may be
+         * stuck or dead.
          */
-        close(command_output);
-        command_output = 0;
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+          /* Something went wrong, close the stream and send no more commands.
+           *
+           * Printing a diagnostic is inappropriate at this point since we're in
+           * the middle of the host's execution and it may be using stderr for
+           * something.
+           */
+          close(command_output);
+          command_output = 0;
+        }
       }
     }
   }
