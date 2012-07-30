@@ -87,8 +87,6 @@ INSTALLING
 Dependencies:
   Just make and a C compiler. GNU Autotools as well if working directly from
   the git distribution.
-  Your kernel must support using O_ASYNC on pipes. Linux 2.6 (and later) is an
-  example of such a kernel.
 
 Building:
   If configure does not exist in the project directory, first run
