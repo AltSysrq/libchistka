@@ -427,14 +427,12 @@ int open(__const char* pathname, int flags, ...) {
         /* We couldn't get the current position. Ignore the error and just
          * proceed to the next step.
          */
-        errno = 0;
         goto after_readahead;
       }
       if (-1 == lseek(fd, 0, SEEK_SET)) {
         /* We couldn't seek for some reason.
          * Ignore the error and just proceed to any next step.
          */
-        errno = 0;
         goto after_readahead;
       }
       /* Read to EOF or the readahead limit */
@@ -447,11 +445,14 @@ int open(__const char* pathname, int flags, ...) {
     } else {
       /* Not a regular file or fstat() failed.
        * In case of the latter, reset errno.
+       * (Now handled by falling through.)
        */
-      errno = 0;
+      /* errno = 0; */
     }
   }
   after_readahead:
+  /* Reset errno to what it was before seeking, statting, etc */
+  errno = old_errno;
 
   /* If reading, send the filename to the daemon if safe. */
   if (((flags & O_RDONLY) == O_RDONLY ||
