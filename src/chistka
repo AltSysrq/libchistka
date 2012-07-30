@@ -42,7 +42,13 @@ for var in DENY READAHEAD DELAY PROFILE SIBLINGS POLL_TIMEOUT POLL_IGNORE DISABL
 do
     export "CHISTKA_$var"
 done
-LD_PRELOAD="$library"
+
+if test "x$LD_PRELOAD" = "x"
+then
+    LD_PRELOAD="$library"
+else
+    LD_PRELOAD="$library $LD_PRELOAD"
+fi
 export LD_PRELOAD
 
 # Run the program
