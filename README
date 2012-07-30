@@ -92,7 +92,8 @@ Dependencies:
 
 Building:
   If configure does not exist in the project directory, first run
-    autoreconf
+    mkdir m4
+    autoreconf -i
 
   In either case, then run
     ./configure
