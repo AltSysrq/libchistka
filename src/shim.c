@@ -354,7 +354,11 @@ int open(__const char* pathname, int flags, ...) {
    * most programs implicitly call open() during linking etc, so this will
    * generally not be a problem.
    */
-  if (!copen) libchistka_init();
+  if (!copen) {
+    libchistka_init();
+    /* Prevent _init()'s actions from affecting errno. */
+    errno = old_errno;
+  }
 
   va_start(args, flags);
   mode = va_arg(args, mode_t);
@@ -370,8 +374,19 @@ int open(__const char* pathname, int flags, ...) {
 #define RETURN(value) do { status = value; goto end; } while(0)
 
   /* If enabled but not initialised, call post_init now */
-  if (!lps_daemon)
+  if (!lps_daemon) {
     post_init();
+    /* Prevent leaking errno changes. */
+    errno = old_errno;
+
+    /* If the shim was disabled as a result of failed secondary initialisation,
+     * just perform passthrough here.
+     */
+    if (!shim_enabled) {
+      unlock();
+      return(*copen)(pathname, flags, mode);
+    }
+  }
 
   /* Should we deny it? */
   if (should_deny((char*)pathname)) {
