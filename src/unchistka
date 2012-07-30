@@ -1,0 +1,14 @@
+#! /bin/sh
+# Convenience program for running programs without the influence of libchistka,
+# even when libchistka is set to be used system-wide.
+
+if test "x$1" = "x" || test "x$1" = "x-?" || test "x$1" = "x-h" || \
+   test "x$1" = "x-help" || test "x$1" = "x--help"
+then
+    echo "Usage: $0 program [arguments...]"
+    exit 1
+fi
+
+CHISTKA_DISABLE=yes
+export CHISTKA_DISABLE
+exec $*
