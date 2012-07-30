@@ -69,6 +69,9 @@
 #define PAGESIZE sysconf(_SC_PAGE_SIZE)
 #endif
 
+/* The bits which indicate read/write access. */
+#define ACCESS_FLAGS (O_RDONLY|O_WRONLY|O_RDWR)
+
 /* Semaphore to lock state shared in the open() implementation etc.
  * Only initialised if has_semaphore is true.
  */
@@ -395,7 +398,7 @@ int open(__const char* pathname, int flags, ...) {
      * sense, it doesn't make any more sense to fail due to the file not
      * existing in that case.
      */
-    if (((flags & (O_RDONLY|O_WRONLY|O_RDWR)) != O_RDONLY) ||
+    if (((flags & ACCESS_FLAGS) != O_RDONLY) ||
         (flags & O_CREAT)) {
       hs_put(deny_exempt, (char*)pathname);
     } else {
@@ -417,8 +420,8 @@ int open(__const char* pathname, int flags, ...) {
   /* If reading (O_RDONLY or O_RDWR), perform readahead if this is a regular
    * file.
    */
-  if ((flags & O_RDONLY) == O_RDONLY ||
-      (flags & O_RDWR  ) == O_RDWR) {
+  if ((flags & ACCESS_FLAGS) == O_RDONLY ||
+      (flags & ACCESS_FLAGS) == O_RDWR) {
     /* Make sure it's a normal file */
     if (!fstat(fd, &stat) && S_ISREG(stat.st_mode)) {
       readahead_amt = config_readahead()*(1024*1024/sizeof(discard));
@@ -455,8 +458,8 @@ int open(__const char* pathname, int flags, ...) {
   errno = old_errno;
 
   /* If reading, send the filename to the daemon if safe. */
-  if (((flags & O_RDONLY) == O_RDONLY ||
-       (flags & O_RDWR  ) == O_RDWR) &&
+  if (((flags & ACCESS_FLAGS) == O_RDONLY ||
+       (flags & ACCESS_FLAGS) == O_RDWR) &&
       !strchr(pathname, '\n') &&
       strlen(pathname) <= CHISTKA_MAX_FILENAME_LEN &&
       command_output) {
