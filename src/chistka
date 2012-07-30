@@ -1,0 +1,49 @@
+#! /bin/sh
+# Convenience script for running programs within libchistka.
+
+if test "x$1" = "x" || test "x$1" = "x-?" || test "x$1" = "x-h" || \
+   test "x$1" = "x-help" || test "x$1" = "x--help"
+then
+    echo "Usage: $0 program [arguments...]"
+    exit 1
+fi
+
+CONFIG_PATHS="/usr/local/etc/chistka /usr/opt/etc/chistka /usr/etc/chistka
+/etc/chistka $HOME/.chistka"
+LIB_PATHS="/lib /usr/lib /usr/local/lib"
+LIBNAME="libchistka.so"
+
+# Read in configuration
+CHISTKA_PROFILE=`basename "$1"`
+for path in $CONFIG_PATHS
+do
+    test -r "$path/$1" && . "$path/$1"
+done
+
+# Find the libchistka library
+library=""
+for path in $LIB_PATHS
+do
+    if test -r "$path/$LIBNAME"
+    then
+        library="$path/$LIBNAME"
+        break
+    fi
+done
+
+if test "x$library" = "x"
+then
+    echo "Could not locate $LIBNAME under any of: $LIB_PATHS"
+    exit 2
+fi
+
+# Export parms
+for var in DENY READAHEAD DELAY PROFILE SIBLINGS POLL_TIMEOUT POLL_IGNORE DISABLE
+do
+    export "CHISTKA_$var"
+done
+LD_PRELOAD="$library"
+export LD_PRELOAD
+
+# Run the program
+exec $*
