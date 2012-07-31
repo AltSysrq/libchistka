@@ -147,6 +147,25 @@ Setting the environment variable CHISTKA_DISABLE to anything disables ALL
 special behaviour provided by the shim, and causes all calls to be passed to
 the standard C library (or whatever follows chistka in the chain) verbatim.
 
+SYSTEM-WIDE INSTALL
+
+On GNU/Linux (and possibly others), you can apply libchistka to all programs
+ever run on your operating system. After installing libchistka, add
+  /path/to/libchistka.so
+to
+  /etc/ld.so.preload
+where /path/to is your prefix (/usr/local/lib by default). Make sure the prefix
+is somewhere that is accessable at early boot time; if in doubt, reconfigure
+and recompile with
+  ./configure --prefix=/
+  make clean all install
+
+After writing /etc/ld.so.preload, it is advisable to
+  unchistka sync
+
+Be careful with a system-wide install, as it could break everything. It is
+known to work correctly on Debian Squeeze.
+
 ISSUES
 
 In the rare case of a program spawning multiple threads before any call to
