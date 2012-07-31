@@ -403,7 +403,7 @@ int open(__const char* pathname, int flags, ...) {
       hs_put(deny_exempt, (char*)pathname);
     } else {
       /* This is not the file you are looking for... */
-      errno = ENOENT;
+      old_errno = errno = ENOENT;
       RETURN(-1);
     }
   }
@@ -454,8 +454,6 @@ int open(__const char* pathname, int flags, ...) {
     }
   }
   after_readahead:
-  /* Reset errno to what it was before seeking, statting, etc */
-  errno = old_errno;
 
   /* If reading, send the filename to the daemon if safe. */
   if (((flags & ACCESS_FLAGS) == O_RDONLY ||
@@ -494,6 +492,9 @@ int open(__const char* pathname, int flags, ...) {
       }
     }
   }
+
+  /* Reset errno to what it was before seeking, statting, etc */
+  errno = old_errno;
 
   RETURN(fd);
 
