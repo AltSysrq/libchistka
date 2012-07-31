@@ -124,7 +124,8 @@ static inline int get_last_fd_num() {
 #      define CHISTKA_SOCKET_FD ((int)(INT_MAX-1))
 #    endif
 #  else
-#    error Could not determine CHISTKA_SOCKET_FD; please define it yourself.
+#    warning Could not determine CHISTKA_SOCKET_FD; please define it yourself.
+#    warning libchistka will still work, but compatability will be reduced.
 #  endif
 #endif /* not defined CHISTKA_SOCKET_FD */
 
@@ -384,17 +385,19 @@ static void post_init(void) {
      */
     unlink(addr.sun_path);
   } else {
+#ifdef CHISTKA_SOCKET_FD
     /* Try to move it to CHISTKA_SOCKET_FD */
     close(CHISTKA_SOCKET_FD);
     if (-1 == dup2(sock, CHISTKA_SOCKET_FD)) {
-#ifdef DEBUG
+#  ifdef DEBUG
       perror("chistka: dup2");
-#endif
+#  endif
     } else {
       /* Close original and use new name */
       close(sock);
       sock = CHISTKA_SOCKET_FD;
     }
+#endif /* defined CHISTKA_SOCKET_FD */
 
     command_output = sock;
     /* Make it non-blocking so that if the daemon gets stuck or KILLed, it
