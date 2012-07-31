@@ -40,6 +40,7 @@
 
 #include <dlfcn.h>
 #include <unistd.h>
+#include <limits.h>
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -71,6 +72,61 @@
 
 /* The bits which indicate read/write access. */
 #define ACCESS_FLAGS (O_RDONLY|O_WRONLY|O_RDWR)
+
+/* Defines the FD number to use for the socket to talk to the daemon. By
+ * default, this is the last possible file descriptor number. After opening the
+ * socket, whatever is on this FD is closed (if there was anything), then the
+ * socket is dup2()ed to this FD, and the original is closed.
+ *
+ * This is done for two reasons:
+ * o It prevents contamination of the lower FD numbers, which breaks some
+ *   programs. For example, /sbin/startpar on Debian fork()s. The child then
+ *   closes FD 1, then calls open(). This initialises libchistka, which gets FD
+ *   for its socket, and another FD is returned for the actual file. But
+ *   /sbin/startpar was expecting exactly 1, and dies.
+ * o If a program fork()s without exec()ing, the socket stays open but
+ *   libchistka gets reinitialised. This way, it closes the old socket and then
+ *   reuses that FD.
+ *
+ * Of course, this could potentially conflict with another program which also
+ * choses its own FD numbers. In this case, define your own constant which
+ * doesn't conflict. For example:
+ *   make 'CFLAGS=-DCHISTKA_SOCKET_FD=31337' all
+ */
+#ifndef CHISTKA_SOCKET_FD
+#  ifdef _SC_OPEN_MAX
+static inline int get_last_fd_num() {
+  long result = sysconf(_SC_OPEN_MAX);
+  if (result <= 0) {
+    /* Fall back on predefined constant */
+#    if defined(_POSIX_OPEN_MAX) && _POSIX_OPEN_MAX > 0
+    result = _POSIX_OPEN_MAX;
+#    else
+    /* System has no definite limit */
+    result = INT_MAX;
+#    endif
+  }
+
+  /* Maximum value is one less than count */
+  --result;
+
+  /* Truncate to integer if too large */
+  if (result > INT_MAX)
+    result = INT_MAX;
+
+  return result;
+}
+#    define CHISTKA_SOCKET_FD (get_last_fd_num())
+#  elif defined(_POSIX_OPEN_MAX)
+#    if _POSIX_OPEN_MAX > 0 && _POSIX_OPEN_MAX <= INT_MAX
+#      define CHISTKA_SOCKET_FD ((int)(_POSIX_OPEN_MAX-1))
+#    else
+#      define CHISTKA_SOCKET_FD ((int)(INT_MAX-1))
+#    endif
+#  else
+#    error Could not determine CHISTKA_SOCKET_FD; please define it yourself.
+#  endif
+#endif /* not defined CHISTKA_SOCKET_FD */
 
 /* Semaphore to lock state shared in the open() implementation etc.
  * Only initialised if has_semaphore is true.
@@ -328,6 +384,18 @@ static void post_init(void) {
      */
     unlink(addr.sun_path);
   } else {
+    /* Try to move it to CHISTKA_SOCKET_FD */
+    close(CHISTKA_SOCKET_FD);
+    if (-1 == dup2(sock, CHISTKA_SOCKET_FD)) {
+#ifdef DEBUG
+      perror("chistka: dup2");
+#endif
+    } else {
+      /* Close original and use new name */
+      close(sock);
+      sock = CHISTKA_SOCKET_FD;
+    }
+
     command_output = sock;
     /* Make it non-blocking so that if the daemon gets stuck or KILLed, it
      * won't negatively affect the host process.
