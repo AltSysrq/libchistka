@@ -9,12 +9,14 @@ then
 fi
 
 CONFIG_PATHS="/usr/local/etc/chistka /usr/opt/etc/chistka /usr/etc/chistka
-/etc/chistka $HOME/.chistka"
+/etc/chistka $HOME/.chistka/config"
 LIB_PATHS="/lib /usr/lib /usr/local/lib"
 LIBNAME="libchistka.so"
 
 # Read in configuration
-CHISTKA_PROFILE=`basename "$1"`
+mkdir -p "$HOME/.chistka/profile"
+CHISTKA_PROFILE_TAIL=`basename "$1"`
+CHISTKA_PROFILE="$HOME/.chistka/profile/$CHISTKA_PROFILE_TAIL"
 for path in $CONFIG_PATHS
 do
     test -r "$path/$1" && . "$path/$1"
