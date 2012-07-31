@@ -261,7 +261,7 @@ static void post_init(void) {
         /* Remove the socket file so nobody else connects to it. */
         unlink(addr.sun_path);
 
-        exit(-1);
+        _exit(-1);
       }
 
       /* Switch to daemon process */
@@ -274,7 +274,7 @@ static void post_init(void) {
 #endif
       /* Remove the socket file so nobody else connects to it. */
       unlink(addr.sun_path);
-      exit(-1);
+      _exit(-1);
     }
 
     if (lps_daemon == -1) {
