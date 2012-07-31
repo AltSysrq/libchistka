@@ -339,6 +339,53 @@ static void post_init(void) {
   deny_exempt = hs_create();
 }
 
+/* Converts the given flags to open() to a human-readable string and returns
+ * it.
+ */
+#ifdef DEBUG_SHIM_OPEN
+static char* flagstr(int flags) {
+  static char str[256];
+  char rest[16];
+
+  switch (flags & ACCESS_FLAGS) {
+  case O_RDONLY:
+    strcpy(str, "R|");
+    break;
+  case O_WRONLY:
+    strcpy(str, "W|");
+    break;
+  case O_RDWR:
+    strcpy(str, "RW|");
+    break;
+  default:
+    sprintf(str, "%X|", (flags & ACCESS_FLAGS));
+    break;
+  }
+  flags &= ~ACCESS_FLAGS;
+
+#define C(f) if (flags & O_##f) strcat(str, #f "|"); flags &= ~O_##f
+  C(APPEND);
+  C(ASYNC);
+  C(CLOEXEC);
+  C(CREAT);
+  C(DIRECT);
+  C(DIRECTORY);
+  C(EXCL);
+  C(NOATIME);
+  C(NOCTTY);
+  C(NOFOLLOW);
+  C(NONBLOCK);
+  C(NDELAY);
+  C(SYNC);
+  C(TRUNC);
+#undef C
+
+  sprintf(rest, "%X", flags);
+  strcat(str, rest);
+  return str;
+}
+#endif
+
 int open(__const char* pathname, int flags, ...) {
   va_list args;
   mode_t mode;
@@ -367,9 +414,21 @@ int open(__const char* pathname, int flags, ...) {
   mode = va_arg(args, mode_t);
   va_end(args);
 
+#ifdef DEBUG_SHIM_OPEN
+  fprintf(stderr, "DEBUG: open(%s, %s, %d) = ",
+          pathname, flagstr(flags), mode);
+#endif
+
   /* Simple pass-through if disabled */
-  if (!shim_enabled)
-    return (*copen)(pathname, flags, mode);
+  if (!shim_enabled) {
+    fd = (*copen)(pathname, flags, mode);
+#ifdef DEBUG_SHIM_OPEN
+    old_errno = errno;
+    fprintf(stderr, "(disabled) %d, %d (%s)\n", fd, errno, strerror(errno));
+    errno = old_errno;
+#endif
+    return fd;
+  }
 
   /* Entering shared state. If we have a semaphore, lock it now. */
   lock();
@@ -387,7 +446,13 @@ int open(__const char* pathname, int flags, ...) {
      */
     if (!shim_enabled) {
       unlock();
-      return(*copen)(pathname, flags, mode);
+      fd = (*copen)(pathname, flags, mode);
+#ifdef DEBUG_SHIM_OPEN
+      old_errno = errno;
+      fprintf(stderr, "(failure) %d, %d (%s)\n", fd, errno, strerror(errno));
+      errno = old_errno;
+#endif
+      return fd;
     }
   }
 
@@ -501,6 +566,9 @@ int open(__const char* pathname, int flags, ...) {
   end:
   /* Leaving use of shared state, release the semaphore if there is one. */
   unlock();
+#ifdef DEBUG_SHIM_OPEN
+  fprintf(stderr, "%d, %d (%s)\n", fd, errno, strerror(errno));
+#endif
   errno = old_errno;
   return status;
 }
