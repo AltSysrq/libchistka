@@ -264,6 +264,9 @@ static void post_init(void) {
         _exit(-1);
       }
 
+      /* Close original since we dupped to stdin */
+      close(sock);
+
       /* Switch to daemon process */
       execlp("chistkad", "chistkad", addr.sun_path, NULL);
 
@@ -303,6 +306,7 @@ static void post_init(void) {
     return;
   }
 
+  close(sock);
   /* Connect to the now-running daemon */
   sock = socket(AF_UNIX, SOCK_DGRAM, 0);
   if (sock == -1 ||
@@ -329,6 +333,14 @@ static void post_init(void) {
      * won't negatively affect the host process.
      */
     if (fcntl(sock, F_SETFL, O_NONBLOCK)) {
+#ifdef DEBUG
+      perror("chistka: fcntl");
+#endif
+    }
+    /* Close on exec() so that programs with children don't (effectively) leak
+     * file descriptors.
+     */
+    if (fcntl(sock, F_SETFD, FD_CLOEXEC)) {
 #ifdef DEBUG
       perror("chistka: fcntl");
 #endif
