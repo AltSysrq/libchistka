@@ -415,8 +415,13 @@ int open(__const char* pathname, int flags, ...) {
   va_end(args);
 
 #ifdef DEBUG_SHIM_OPEN
-  fprintf(stderr, "DEBUG: open(%s, %s, %d) = ",
-          pathname, flagstr(flags), mode);
+  status = readlink("/proc/self/exe", discard, 128);
+  if (status == -1)
+    strcpy(discard, "(unknown)");
+  else
+    discard[status] = 0;
+  fprintf(stderr, "DEBUG: %s open(%s, %s, %d) = ",
+          discard, pathname, flagstr(flags), mode);
 #endif
 
   /* Simple pass-through if disabled */
