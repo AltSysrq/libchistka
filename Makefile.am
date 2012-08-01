@@ -1,2 +1,3 @@
 ACLOCAL_AMFLAGS = -I m4
-SUBDIRS = src
+SUBDIRS = src man
+doc_DATA = README COPYING

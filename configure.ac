@@ -9,7 +9,7 @@ LT_PREREQ([1.5])
 LT_INIT([dlopen])
 AC_CONFIG_SRCDIR([src/shim.c])
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile src/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile man/Makefile])
 # Disable Automake's braindead want to rerun ./configure if it thinks it
 # needs to regenerate the entire build system
 AM_MAINTAINER_MODE
