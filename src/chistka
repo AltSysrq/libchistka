@@ -12,6 +12,7 @@ CONFIG_PATHS="/usr/local/etc/chistka /usr/opt/etc/chistka /usr/etc/chistka
 /etc/chistka $HOME/.chistka/config"
 LIB_PATHS="/lib /usr/lib /usr/local/lib"
 LIBNAME="libchistka.so"
+unset CHISTKA_DISABLE
 
 # Read in configuration
 mkdir -p "$HOME/.chistka/profile"
