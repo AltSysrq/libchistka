@@ -1,0 +1,57 @@
+.Dd 31 July 2012
+.Dt CHISTKA 1
+.Sh NAME
+.Nm chistka
+.Nd Run a command using libchistka.
+.Sh SYNOPSIS
+.Nm
+.Ar program Op Ar args...
+.Sh DESCRIPTION
+Run
+.Ar program
+with the given
+.Ar args ,
+configuring the dynamic linker to run with libchistka, and setting libchistka's
+configuration appropriately.
+.Pp
+The Chistka profile is set to $HOME/.chistka/profile/
+.Ar program ,
+where
+.Ar program
+is the basename of the first command-line argument.
+.Pp
+System and user configuration for the program is then read in. In each of the
+below directories, if a file whose name is the same as the basename of
+.Ar program
+exists and is readable, it is sourced.
+.Bl -bullet
+.It
+/usr/local/etc/chistka
+.It
+/usr/opt/etc/chistka
+.It
+/usr/etc/chistka
+.It
+/etc/chistka
+.It
+$HOME/.chistka/config
+.El
+.Pp
+Each of these files is expected simply to set the environment variables used by
+libchistka (see referenced library documentation). After all have been sourced,
+all the known configuration variables are exported, and
+.Ar program
+.Ar args...
+is exec()ed.
+.Pp
+.Nm
+will initially unset
+.Ar CHISTKA_DISABLE
+if it is set.
+.Sh SEE ALSO
+The README file included in the documentation of libchistka describes in detail
+the various environment variables used by libchistka, as well as how it
+operates and potential compatibility issues.
+.Pp
+You can probably find the README under /usr/share/doc/libchistka or
+/usr/local/share/doc/libchistka.

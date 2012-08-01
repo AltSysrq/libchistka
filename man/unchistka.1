@@ -1,0 +1,22 @@
+.Dd 31 July 2012
+.Dt UNCHISTKA 1
+.Sh NAME
+.Nm unchistka
+.Nd Run a program without influence from libchistka.
+.Sh SYNOPSIS
+.Nm
+.Ar program Op Ar args...
+.Sh DESCRIPTION
+.Nm
+runs
+.Ar program
+with the given
+.Ar args ,
+ensuring that libchistka will not affect the program.
+.Pp
+Note that no attempt is made to prevent libchistka from being linked into the
+program; this will still happen if configured via
+.Ar LD_PRELOAD
+or in /etc/ld.so.preload. Rather, it simply sets and exports
+.Ar CHISTKA_DISABLE
+so that libchistka is purely pass-through.
