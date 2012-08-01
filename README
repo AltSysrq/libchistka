@@ -163,6 +163,9 @@ and recompile with
 After writing /etc/ld.so.preload, it is advisable to
   unchistka sync
 
+Note that there is currently no easy way to apply non-default settings or
+profiles to the whole system.
+
 Be careful with a system-wide install, as it could break everything. It is
 known to work correctly on Debian Squeeze.
 
