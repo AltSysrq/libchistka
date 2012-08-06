@@ -70,6 +70,16 @@
 #define PAGESIZE sysconf(_SC_PAGE_SIZE)
 #endif
 
+#ifndef O_SYNC
+#define O_SYNC 0
+#endif
+#ifndef O_RSYNC
+#define O_RSYNC 0
+#endif
+#ifndef O_DSYNC
+#define O_DSYNC 0
+#endif
+
 /* The bits which indicate read/write access. */
 #define ACCESS_FLAGS (O_RDONLY|O_WRONLY|O_RDWR)
 
@@ -494,7 +504,8 @@ int open(__const char* pathname, int flags, ...) {
   }
 
   va_start(args, flags);
-  mode = va_arg(args, mode_t);
+  /* mode_t will be promoted to int on systems where mode_t is smaller. */
+  mode = va_arg(args, int /*mode_t*/);
   va_end(args);
 
 #ifdef DEBUG_SHIM_OPEN
