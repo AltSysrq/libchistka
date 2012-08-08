@@ -19,6 +19,8 @@ AC_PROG_CC
 AC_PROG_RANLIB
 
 # Checks for libraries.
+AC_SEARCH_LIBS(dlopen, [dl])
+AC_SEARCH_LIBS(sem_wait, [rt])
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h string.h unistd.h dlfcn.h fcntl.h])
