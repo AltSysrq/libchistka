@@ -198,6 +198,40 @@ static int (*cfsync)(int) = NULL;
 static int (*cfdatasync)(int) = NULL;
 static int (*cmsync)(void*, size_t, int) = NULL;
 
+/* Fallback for functions which could not be found for forwarding, but for
+ * which program operation will not be affected without them.
+ *
+ * Simply returns zero and leaves errno untouched.
+ */
+static int fallback_optional(/*...*/) {
+  return 0;
+}
+
+/* Fallback for functions which could not be found for forwarding, and whose
+ * absence would prevent correct operation of the host program.
+ *
+ * Sets errno to ELIBACC and returns -1.
+ */
+static int fallback_mandatory(/*...*/) {
+#ifdef ELIBACC
+  /* Not posix, but preferable */
+  errno = ELIBACC;
+#else
+  /* Posix */
+  errno = ENOSYS;
+#endif
+  return -1;
+}
+
+/* Like fallback_mandatory, but returns ssize_t. */
+static ssize_t fallback_mandatory_ssize_t(/*...*/) {
+  fallback_mandatory();
+  return -1;
+}
+
+/* Fallback for void functions which could not be found. Does nothing. */
+static void fallback_noop(/*...*/) {}
+
 /* Set of files exempted from the DENY option. */
 static hashset deny_exempt;
 
@@ -237,23 +271,29 @@ static void __attribute__((constructor)) libchistka_init(void) {
 
   /* Get the next open() function */
   dlerror(); /* Clear any DL error */
-#define SYMBOL(symbol) \
-  c##symbol = dlsym(RTLD_NEXT, #symbol); \
-  if (message = dlerror()) { \
-    if (cwrite) \
+#ifdef DEBUG
+#  define SYMBOL_PRINT 1
+#else
+#  define SYMBOL_PRINT 0
+#endif
+#define SYMBOL(symbol,otherwise)                          \
+  c##symbol = dlsym(RTLD_NEXT, #symbol);                  \
+  if ((message = dlerror())) {                            \
+    if (cwrite && SYMBOL_PRINT)                           \
       (*cwrite)(STDERR_FILENO, message, strlen(message)); \
-    exit(-1); \
+    c##symbol = (void*)fallback_##otherwise;              \
   }
-  SYMBOL(write);
-  SYMBOL(read);
-  SYMBOL(open);
-  SYMBOL(poll);
-  SYMBOL(sync);
-  SYMBOL(syncfs);
-  SYMBOL(fsync);
-  SYMBOL(fdatasync);
-  SYMBOL(msync);
+  SYMBOL(write,    mandatory_ssize_t);
+  SYMBOL(read,     mandatory_ssize_t);
+  SYMBOL(open,     mandatory);
+  SYMBOL(poll,     mandatory);
+  SYMBOL(sync,     noop);
+  SYMBOL(syncfs,   optional);
+  SYMBOL(fsync,    optional);
+  SYMBOL(fdatasync,optional);
+  SYMBOL(msync,    optional);
 #undef SYMBOL
+#undef SYMBOL_PRINT
 
   /* See if further operation is disabled */
   if (getenv("CHISTKA_DISABLE")) {
