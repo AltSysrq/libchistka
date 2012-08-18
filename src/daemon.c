@@ -122,9 +122,9 @@ int main(int argc, char** argv) {
 
   event_queue = NULL;
   directories_traversed = hs_create();
-  hs_defunct_at(directories_traversed, 4096);
+  hs_defunct_at(directories_traversed, 65536);
   directories_read = hs_create();
-  hs_defunct_at(directories_read, 4096);
+  hs_defunct_at(directories_read, 65536);
 
   /* If a profile is set, read it if possible, then open for writing. */
   profile_open();
