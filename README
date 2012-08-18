@@ -8,7 +8,8 @@ perform IO irresponsibly.
 
 SYSTEM REQUIREMENTS
 A relatively modern UNIX system which supports LD_PRELOAD, and a C99
-compiler. Chistka is known to work on:
+compiler. You also need GNU Autotools to set up the build system if cloning
+directly from Github. Chistka is known to work on:
   GNU/Linux
   FreeBSD
 
