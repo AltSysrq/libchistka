@@ -6,6 +6,16 @@ libchistka is a layer that can be inserted between the OS's system calls and
 another program. It attempts to remedy power drain caused by programs which
 perform IO irresponsibly.
 
+SYSTEM REQUIREMENTS
+A relatively modern UNIX system which supports LD_PRELOAD, and a C99
+compiler. Chistka is known to work on:
+  GNU/Linux
+  FreeBSD
+
+The system-wide install has only been tested in Debian Squeeze and Wheezy on
+x86 and AMD64, but it works correctly most of the time (about 1 in 50 boot-ups
+hang).
+
 THE READ PROBLEM
 
 A number of programs will open a file for reading, then slowly read it in, or
@@ -149,6 +159,8 @@ the standard C library (or whatever follows chistka in the chain) verbatim.
 
 SYSTEM-WIDE INSTALL
 
+WARNING: The directions in this section could completely break your system!
+
 On GNU/Linux (and possibly others), you can apply libchistka to all programs
 ever run on your operating system. After installing libchistka, add
   /path/to/libchistka.so
@@ -167,7 +179,7 @@ Note that there is currently no easy way to apply non-default settings or
 profiles to the whole system.
 
 Be careful with a system-wide install, as it could break everything. It is
-known to work correctly on Debian Squeeze.
+known to work correctly on Debian Squeeze and Wheezy.
 
 ISSUES
 
