@@ -58,6 +58,10 @@
 #include <semaphore.h>
 #include <poll.h>
 
+#ifdef HAVE_BTRFS_IOCTL_H
+#include <btrfs/ioctl.h>
+#endif
+
 #include "common.h"
 #include "hashset.h"
 
@@ -197,6 +201,7 @@ static int (*csyncfs)(int) = NULL;
 static int (*cfsync)(int) = NULL;
 static int (*cfdatasync)(int) = NULL;
 static int (*cmsync)(void*, size_t, int) = NULL;
+static int (*cioctl)(int, int, void*) = NULL;
 
 /* Fallback for functions which could not be found for forwarding, but for
  * which program operation will not be affected without them.
@@ -292,6 +297,7 @@ static void __attribute__((constructor)) libchistka_init(void) {
   SYMBOL(fsync,    optional);
   SYMBOL(fdatasync,optional);
   SYMBOL(msync,    optional);
+  SYMBOL(ioctl,    optional);
 #undef SYMBOL
 #undef SYMBOL_PRINT
 
@@ -930,4 +936,23 @@ ssize_t read(int fd, void* buff, size_t count) {
 ssize_t write(int fd, __const void* buff, size_t count) {
   if (!cwrite) libchistka_init();
   return read_write_common(fd, (void*)buff, count, cwrite);
+}
+
+int ioctl(int fd, int code, void* data) {
+  /* Suppress Btrfs transactions, since they flush to disk on commit on newer
+   * kernels
+   */
+#ifdef BTRFS_IOC_TRANS_START
+  if (code == BTRFS_IOC_TRANS_START)
+    return 0;
+#endif
+
+#ifdef BTRFS_IOC_TRANS_END
+  if (code == BTRFS_IOC_TRANS_END)
+    return 0;
+#endif
+
+  if (!cioctl) libchistka_init();
+
+  return (*cioctl)(fd, code, data);
 }

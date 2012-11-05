@@ -24,6 +24,7 @@ AC_SEARCH_LIBS(sem_wait, [rt])
 
 # Checks for header files.
 AC_CHECK_HEADERS([stdlib.h string.h unistd.h dlfcn.h fcntl.h])
+AC_CHECK_HEADERS([btrfs/ioctl.h])
 
 # Checks for typedefs, structures, and compiler characteristics.
 AC_TYPE_MODE_T
