@@ -71,6 +71,11 @@ in exchange for losing all guarantees of data integrity.
 
 (This functionality is a rough clone of libeatmydata.)
 
+A related issue is Btrfs's transaction system; in recent kernels, flushoncommit
+is the default, and there is no way to turn it off. If you have the Btrfs
+headers when you compile, libchistka will also prevent userspace programs from
+performing transactions. (Note that this could be very dangerous!)
+
 THE IRRELEVANT POLL PROBLEM
 
 Some programs can be observed (with strace) to poll() a set of several files,
