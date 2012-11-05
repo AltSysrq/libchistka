@@ -204,3 +204,11 @@ cases. For example, if the host process opens a file in read-append mode,
 libchistka will restore the file pointer to its original location after
 prereading, which might no longer be the end of the file (or might not exist
 anymore).
+
+On Debian Sid, concurrent startup (the default) sometimes deadlocks at the end
+of runlevel S.
+
+On Debian Sid, libchistka deadlocks the update-mandb trigger in the APT
+installation process. Debian (and Ubuntu) users are recommended to run
+aptitude/dpkg/apt-get, etc, within unchistka for the time being to avoid this
+problem.
