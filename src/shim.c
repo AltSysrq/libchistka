@@ -939,6 +939,11 @@ ssize_t write(int fd, __const void* buff, size_t count) {
 }
 
 int ioctl(int fd, int code, void* data) {
+  if (!cioctl) libchistka_init();
+
+  if (!shim_enabled)
+    return (*cioctl)(fd, code, data);
+
   /* Suppress Btrfs transactions, since they flush to disk on commit on newer
    * kernels
    */
@@ -951,8 +956,6 @@ int ioctl(int fd, int code, void* data) {
   if (code == BTRFS_IOC_TRANS_END)
     return 0;
 #endif
-
-  if (!cioctl) libchistka_init();
 
   return (*cioctl)(fd, code, data);
 }
