@@ -49,6 +49,7 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 #include <time.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -257,6 +258,18 @@ static unsigned config_readahead() {
   return value;
 }
 
+/* Returns true if the given line of input for the daemon is actually a usable
+ * path.
+ */
+static int is_uselful_path_for_daemon(char* name) {
+  return
+    strncmp(name, "/proc", 5) &&
+    strncmp(name, "/sys", 4) &&
+    strncmp(name, "/dev", 4) &&
+    strncmp(name, "/tmp", 4) &&
+    strncmp(name, "/selinux", 8);
+}
+
 #ifndef __const
 #define __const
 #endif
@@ -269,6 +282,9 @@ static unsigned config_readahead() {
  */
 static void __attribute__((constructor)) libchistka_init(void) {
   char* message;
+
+  assert(is_uselful_path_for_daemon("/foo"));
+  assert(!is_uselful_path_for_daemon("/tmp/foo"));
 
   execution_start_time = time(NULL);
   command_output = 0;
@@ -681,10 +697,13 @@ int open(__const char* pathname, int flags, ...) {
                pathname[0] == '/'? "" : "/",
                pathname);
       /* If it fit into the buffer (which means that
-       * daemon_input[strlen(daemon_input)+1] == '\n'), send it to the daemon.
+       * daemon_input[strlen(daemon_input)+1] == '\n'), send it to the daemon,
+       * unless it starts with a prefix the daemon isn't concerned about (such
+       * as /proc).
        */
       len = strlen(daemon_input);
       if (len > 0 && daemon_input[len-1] == '\n' &&
+          is_uselful_path_for_daemon(daemon_input) &&
           len != write(command_output, daemon_input, len)) {
         /* Not an error if we get EAGAIN or EWOULDBLOCK: The daemon may be
          * stuck or dead.
